@@ -111,7 +111,7 @@ function getOsData(){
 		amzn)
 			DISTRIBUTION="amazonlinux"
 			;;
-		rhel|sles)
+		rhel|sles|rocky)
 			getVersionInteger
 			;;
 		freebsd)
@@ -147,7 +147,7 @@ function getServerName(){
 function updatePackageManager(){
 	# Add Okta ASA/OPA repository to local package manager
 	case "$DISTRIBUTION" in
-		amazonlinux|rhel|centos|alma|fedora )
+		amazonlinux|rhel|centos|alma|fedora|rocky )
 			# Set the package manager to dnf if installed, otherwise use yum
 			if which dnf >/dev/null 2>&1;then
 				PACKAGE_MANAGER="dnf"
