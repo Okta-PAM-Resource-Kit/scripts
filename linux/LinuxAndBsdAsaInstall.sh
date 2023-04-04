@@ -111,7 +111,11 @@ function getOsData(){
 		amzn)
 			DISTRIBUTION="amazonlinux"
 			;;
-		rhel|sles|rocky)
+		rocky )
+			getVersionInteger
+			DISTRIBUTION="rhel"
+			;;
+		rhel|sles)
 			getVersionInteger
 			;;
 		freebsd)
