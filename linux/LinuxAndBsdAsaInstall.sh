@@ -108,17 +108,17 @@ function getOsData(){
 
 	# Make necessary adjustments to align with ASA repo structure
 	case "$DISTRIBUTION" in
-		amzn)
+		amzn )
 			DISTRIBUTION="amazonlinux"
 			;;
 		rocky )
 			getVersionInteger
 			DISTRIBUTION="rhel"
 			;;
-		rhel|sles)
+		rhel|sles )
 			getVersionInteger
 			;;
-		freebsd)
+		freebsd )
 			getVersionInteger
 			if [[ "$CPU_ARCH" == "x86_64" ]];then
 				CPU_ARCH="amd64"
