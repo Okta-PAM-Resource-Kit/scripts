@@ -455,7 +455,7 @@ while getopts ":S:sg:cr:phf" opt; do
 			PROXY_CHECK_ENABLED=false
 			;;
 		h )
-			echo "Usage: script.sh [-s] [-S server_enrollment_token] [-g GATEWAY_TOKEN] [-c|-b [prod|test]] [-p] [-h] "
+			echo "Usage: LinuxAndBsdAsaInstall.sh [-s] [-S server_enrollment_token] [-g GATEWAY_TOKEN] [-c|-b [prod|test]] [-p] [-h] "
 			echo "	-s                          Install ASA Server Tools without providing an enrollment token."
 			echo "	-S server_enrollment_token  Install ASA Server Tools with the provided enrollment token."
 			echo "  -f                          Force re-installation of existing packages."
