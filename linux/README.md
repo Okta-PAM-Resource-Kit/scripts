@@ -1,7 +1,7 @@
 ## Overview
 LinuxAndBsdAsaInstall.sh is intended to function as a universal install script for support Linux and BSD versions of the ASA Server Tools, ASA Gateway and RDP session Transcoder, and ASA Client Tools.  
 
-**These scripts are not supported by Okta, and no warranty is expressed or implied.  Please review and understand the scripts before using.  Use at your own risk.**
+**_These scripts are not supported by Okta, and no warranty is expressed or implied.  Please review and understand the scripts before using.  Use at your own risk._**
 
 
 ## Capabilities
@@ -17,6 +17,7 @@ At a high level, the script will:
 ## Usage
 This script can be run interactively from the command line using arguments, or parameters can be set within the script for simple, automated execution.
 
+```
 LinuxAndBsdAsaInstall.sh [-s] [-S server_enrollment_token] [-g GATEWAY_TOKEN] [-c|-b [prod|test]] [-p] [-h] 
 				-s                          Install ASA Server Tools without providing an enrollment token.
 				-S server_enrollment_token  Install ASA Server Tools with the provided enrollment token.
@@ -26,5 +27,5 @@ LinuxAndBsdAsaInstall.sh [-s] [-S server_enrollment_token] [-g GATEWAY_TOKEN] [-
 				-r                          Set installation branch, default is prod.
 			  	-p                          Skip detection of TLS inspection web proxy.
 				-h                          Display this help message.
-
+```
 
