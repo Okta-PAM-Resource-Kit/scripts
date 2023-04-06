@@ -8,7 +8,7 @@ LinuxAndBsdAsaInstall.sh is intended to function as a universal install script f
 At a high level, the script will:
 * Add the ASA repos to the local package manager when possible, allowing easy updates using standard tools
 * Test for the presence of TLS inspection (MITM) which would interfere with outbound calls to Okta
-* Extract a useful server name from the "Name" tag in AWS.  (_ _Allow tags in instance metadata_ _ must be enabled.)
+* Extract a useful server name from the "Name" tag in AWS.  (_Allow tags in instance metadata_ must be enabled.)
 * Create default configuration files for ASA Server Tools and ASA Gateway
 * Create enrollment token file for ASA Server Tools
 * Create setup token file for ASA Gateway

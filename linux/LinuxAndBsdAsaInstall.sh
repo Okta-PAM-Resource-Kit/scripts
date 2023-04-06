@@ -124,6 +124,11 @@ function getOsData(){
 				CPU_ARCH="amd64"
 			fi
 			;;
+		debian )
+			if [[ "$CODENAME" == "stretch" ]];then
+				CODENAME="buster"
+			fi
+			;;
 	esac
 }
 
