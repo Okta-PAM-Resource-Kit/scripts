@@ -125,6 +125,9 @@ function getOsData(){
 			fi
 			;;
 		debian )
+			# debian stretch is no longer an ASA supported OS so there's no path for it in the repository
+			# however, packages for buster may continue to function on stretch even though that OS is no
+			# longer included in unit or regression testing. 
 			if [[ "$CODENAME" == "stretch" ]];then
 				CODENAME="buster"
 			fi
