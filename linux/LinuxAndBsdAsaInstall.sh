@@ -115,7 +115,7 @@ function getOsData(){
 			getVersionInteger
 			DISTRIBUTION="rhel"
 			;;
-		rhel|sles )
+		rhel )
 			getVersionInteger
 			;;
 		freebsd )
@@ -124,6 +124,10 @@ function getOsData(){
 				CPU_ARCH="amd64"
 			fi
 			;;
+		sles|opensuse-leap )
+			getVersionInteger
+			DISTRIBUTION="suse"
+			;;		
 		debian )
 			# debian stretch is no longer an ASA supported OS so there's no path for it in the repository
 			# however, packages for buster may continue to function on stretch even though that OS is no
@@ -174,6 +178,7 @@ function updatePackageManager(){
 			# Import ASA repo key 
 			echo "Adding Okta repository to local package manager for Amazon Linux, RHEL, CentOS, Alma, or Fedora"
 			sudo rpm --import $REPO_URL/GPG-KEY-OktaPAM-2023
+			
 			# Create the yum repo artifact for inclusion in the package manager
 			rpm_art=$(cat <<-EOF
 			[oktapam-stable]
@@ -192,31 +197,59 @@ function updatePackageManager(){
 			sudo $PACKAGE_MANAGER update -qy
 			
 			;;
+		suse )
+			# Use Zypper as the package manager
+			PACKAGE_MANAGER="zypper"
+			
+			#adjust install command if forcing reinstall
+			if [[ "$FORCE_REINSTALL" == "true" ]]; then
+				REPO_INSTALL_ARG="install -f"
+			fi
+			
+			echo "Adding Okta repository to local package manager for SLES or OpenSuse"
+			
+			# Import ASA repo key 
+			sudo rpm --import $REPO_URL/GPG-KEY-OktaPAM-2023
+			
+			# Add/replace ASA repo to local package manager
+			sudo zypper -q -n removerepo oktapam 2>>/dev/null
+			sudo zypper -q -n addrepo --check --name "OktaPAM" --enable --refresh --keep-packages --gpgcheck-strict $REPO_URL/repos/rpm/$REPO_RPM/suse/$VERSION/x86_64 oktapam
+			
+			# Update package manager indexes
+			sudo zypper refresh
+			;;
 		ubuntu|debian )
 			# Use apt-get as the package manager
 			PACKAGE_MANAGER="apt-get"
+			
 			#adjust install command if forcing reinstall
 			if [[ "$FORCE_REINSTALL" == "true" ]]; then
 				REPO_INSTALL_ARG="install --reinstall"
 			fi
-			# Update package manager indexes 
+			
 			echo "Adding Okta repository to local package manager for Ubuntu or Debian"
+
+			# Update package manager indexes 
 			sudo $PACKAGE_MANAGER update -qy
+			
 			# Ensure curl and gpg are installed, as they are needed to add ASA repo keys
 			sudo $PACKAGE_MANAGER install -qy curl gpg
+			
 			# Download and unwrap ASA repo keys
 			curl -fsSL $REPO_URL/GPG-KEY-OktaPAM-2023 | gpg --dearmor | sudo tee /usr/share/keyrings/oktapam-2023-archive-keyring.gpg > /dev/null
+			
 			# Create apt-get repo config file
 			echo "deb [signed-by=/usr/share/keyrings/oktapam-2023-archive-keyring.gpg] $REPO_URL/repos/deb $CODENAME $REPO_DEB" | sudo tee /etc/apt/sources.list.d/oktapam.list
+			
 			# Update package manager indexes again
 			sudo $PACKAGE_MANAGER update -qy
 			;;
-		
 		freebsd )
 			#adjust install command if forcing reinstall
 			if [[ "$FORCE_REINSTALL" == "true" ]]; then
 				REPO_INSTALL_ARG="install -f"
 			fi
+			
 			# There is currenlty no pkg repo integration, so downloading the packages locally for installation
 			pkg_base_url="$REPO_URL/repos/$DISTRIBUTION/$REPO_BSD/$VERSION/$CPU_ARCH/"
 
@@ -329,35 +362,53 @@ function createSftGwConfig(){
 
 function installSftd(){
 	# Install ASA Server tools
-	if [[ $DISTRIBUTION == "freebsd" ]];then
-		sudo pkg $REPO_INSTALL_ARG -y ./scaleft-server-tools-$highest_version.pkg
-	else
-		sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-server-tools -qy
-	fi
+	case "$DISTRIBUTION" in 
+		freebsd )
+			sudo pkg $REPO_INSTALL_ARG -y ./scaleft-server-tools-$highest_version.pkg
+			;;
+		suse )
+			sudo $PACKAGE_MANAGER -q -n $REPO_INSTALL_ARG scaleft-server-tools
+			;;
+		* )
+			sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-server-tools -qy
+			;;
+	esac
 }
 
 function installSft(){
 	# Install ASA Client tools
-	if [[ $DISTRIBUTION == "freebsd" ]];then
-		sudo pkg $REPO_INSTALL_ARG -y ./scaleft-client-tools-$highest_version.pkg
-	else
-		sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-client-tools -qy
-	fi
+	case "$DISTRIBUTION" in 
+		freebsd )
+			sudo pkg $REPO_INSTALL_ARG -y ./scaleft-client-tools-$highest_version.pkg
+			;;
+		suse )
+			sudo $PACKAGE_MANAGER -q -n $REPO_INSTALL_ARG scaleft-client-tools
+			;;
+		* )
+			sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-client-tools -qy
+			;;
+	esac
 }
 
 function installSft-Gateway(){
 	# Install ASA Gateway
 	if [[ "$DISTRIBUTION" == "rhel" && "$VERSION" == "8" ]] || [[ "$DISTRIBUTION" == "ubuntu" && ( "$VERSION" == "20.04" || "$VERSION" == "22.04" ) ]]; then
-		sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-rdp-transcoder
+		sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-rdp-transcoder -qy
 		createSftGwConfigRDP
 	else
 		createSftdConfig
 	fi
-	if [[ $DISTRIBUTION == "freebsd" ]];then
-		sudo pkg $REPO_INSTALL_ARG -y ./scaleft-gateway-$highest_version.pkg
-	else
-		sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-gateway
-	fi
+	case "$DISTRIBUTION" in 
+		freebsd )
+			sudo pkg $REPO_INSTALL_ARG -y ./scaleft-gateway-$highest_version.pkg
+			;;
+		suse )
+			sudo $PACKAGE_MANAGER -q -n $REPO_INSTALL_ARG scaleft-gateway
+			;;
+		* )
+			sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-gateway -qy
+			;;
+	esac
 }
 
 function checkNoProxy() {
