@@ -29,3 +29,14 @@ LinuxAndBsdAsaInstall.sh [-s] [-S server_enrollment_token] [-g GATEWAY_TOKEN] [-
 				-h                          Display this help message.
 ```
 
+##Tested Operating Systems
+* Ubuntu 18.04, 20.04, 22.04 
+* Debian 9, 10, 11
+* Redhat 7, 8
+* CentOS 7, 8
+* Rocky Linux 8
+* AmazonLinux 2, 2022
+* SLES 12, 15
+* OpenSuse 15
+
+
