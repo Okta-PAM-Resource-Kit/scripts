@@ -251,16 +251,16 @@ function updatePackageManager(){
 			fi
 			
 			# There is currenlty no pkg repo integration, so downloading the packages locally for installation
-			pkg_base_url="$REPO_URL/repos/$DISTRIBUTION/$REPO_BSD/$VERSION/$CPU_ARCH/"
+			pkg_base_url="$REPO_URL/repos/$DISTRIBUTION/$REPO_BSD/$VERSION/$CPU_ARCH"
 
 			# Use cURL to get the directory listing from the URL
-			response=$(curl -s $pkg_base_url)
+			response=$(curl -s $pkg_base_url/)
 
 			# Use grep to extract the directories from the response
 			pkg_versions=$(echo "$response" | grep -o ">[0-9.]*<" | tr -d '<>' | sort -V)
 
 			# Get the highest version directory from the list
-			highest_version=$(echo "$pkg_versions" | tail -n1 | awk '{print substr($0, 2)}')
+			highest_version=$(echo "$pkg_versions" | tail -n1 )
 
 			# Download the latest packages
 			curl -O "$pkg_base_url/$highest_version/scaleft-server-tools-$highest_version.pkg"
