@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # For headless installation, key variables are initialized below with the appropriate default values.  
 # Run with script with -h option for command line options
@@ -260,7 +260,7 @@ function updatePackageManager(){
 			pkg_versions=$(echo "$response" | grep -o ">[0-9.]*<" | tr -d '<>' | sort -V)
 
 			# Get the highest version directory from the list
-			highest_version=$(echo "$pkg_versions" | tail -n1)
+			highest_version=$(echo "$pkg_versions" | tail -n1 | awk '{print substr($0, 2)}')
 
 			# Download the latest packages
 			curl -O "$pkg_base_url/$highest_version/scaleft-server-tools-$highest_version.pkg"
