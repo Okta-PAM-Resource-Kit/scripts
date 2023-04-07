@@ -366,7 +366,7 @@ function installSftd(){
 		freebsd )
 			sudo pkg $REPO_INSTALL_ARG -y ./scaleft-server-tools-$highest_version.pkg
 			sudo sysrc sftd_enable=YES
-			sudo system sftd start
+			sudo service sftd start
 			;;
 		suse )
 			sudo $PACKAGE_MANAGER -q -n $REPO_INSTALL_ARG scaleft-server-tools
@@ -404,7 +404,7 @@ function installSft-Gateway(){
 		freebsd )
 			sudo pkg $REPO_INSTALL_ARG -y ./scaleft-gateway-$highest_version.pkg
 			sudo sysrc sft-gatewayd_enable=YES
-			sudo system sft-gatewayd start
+			sudo service sft-gatewayd start
 			;;
 		suse )
 			sudo $PACKAGE_MANAGER -q -n $REPO_INSTALL_ARG scaleft-gateway
