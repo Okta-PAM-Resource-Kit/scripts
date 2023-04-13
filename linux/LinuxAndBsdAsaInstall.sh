@@ -364,6 +364,7 @@ function installSftd(){
 	# Install ASA Server tools
 	case "$DISTRIBUTION" in 
 		freebsd )
+			sudo pkt $REPO_INSTALL_ARG -y libsecret
 			sudo pkg $REPO_INSTALL_ARG -y ./scaleft-server-tools-$highest_version.pkg
 			sudo sysrc sftd_enable=YES
 			sudo service sftd start
