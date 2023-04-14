@@ -44,3 +44,51 @@ LinuxAndBsdAsaInstall.sh [-s] [-S server_enrollment_token] [-g GATEWAY_TOKEN] [-
 * AmazonLinux 2, 2022
 * SLES 12, 15
 * OpenSuse 15
+* Fedora 35
+* FreeBSD 12, 13
+
+## Automation
+
+To automate installation using AWS EC2 User Data, GCP startup-script, or orchestration, you can create a simple launcher for your specific use case.  In the server installation example below, the launcher downloads the installation script, then invokes it with the desired enrollment token.  
+
+**_It is highly recommended to store your own copy of the installation script and reference in the launcher script below._**
+
+### Server Agent Installation Only
+
+```bash
+#!/usr/bin/env bash
+#enroll into script-test-GCP project
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/linux/LinuxAndBsdAsaInstall.sh
+chmod +x LinuxAndBsdAsaInstall.sh
+./LinuxAndBsdAsaInstall.sh -S enrollment_token
+```
+
+### Server and Client Agent Installation
+
+```bash
+#!/usr/bin/env bash
+#enroll into script-test-GCP project
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/linux/LinuxAndBsdAsaInstall.sh
+chmod +x LinuxAndBsdAsaInstall.sh
+./LinuxAndBsdAsaInstall.sh -S enrollment_token -c
+```
+
+### Gateway Installation
+
+```bash
+#!/usr/bin/env bash
+#enroll into script-test-GCP project
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/linux/LinuxAndBsdAsaInstall.sh
+chmod +x LinuxAndBsdAsaInstall.sh
+./LinuxAndBsdAsaInstall.sh -g setup_token
+```
+
+### Server Agent and Gateway Installation
+
+```bash
+#!/usr/bin/env bash
+#enroll into script-test-GCP project
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/linux/LinuxAndBsdAsaInstall.sh
+chmod +x LinuxAndBsdAsaInstall.sh
+./LinuxAndBsdAsaInstall.sh -S enrollment_token -g setup_token
+```
