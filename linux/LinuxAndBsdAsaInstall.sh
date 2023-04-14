@@ -310,15 +310,25 @@ function createSftdEnrollmentToken(){
 
 function createSftGatewaySetupToken(){
 	# Create an ASA Gateway setup token file with the provided token value
+	
 	if [ -z "$GATEWAY_TOKEN" ]; then
 		echo "Unable to create sft-gatewayd setup token. GATEWAY_TOKEN is not set or is empty"
 		exit 1
 	else
+		case "$DISTRIBUTION" in 
+			freebsd )
+				GW_TOKEN_PATH=/var/db/sft-gatewayd
+				;;
+			* )
+				GATEWAY_TOKEN=/var/lib/sft-gatewayd
+				;;
+		esac
+
 		echo "Add an enrollment token"
 
-		sudo mkdir -p /var/lib/sft-gatewayd
+		sudo mkdir -p $GW_TOKEN_PATH
 
-		echo "$GATEWAY_TOKEN" | sudo tee /var/lib/sft-gatewayd/setup.token
+		echo "$GATEWAY_TOKEN" | sudo tee $GW_TOKEN_PATH/setup.token
 	fi
 }
 
@@ -404,7 +414,8 @@ function installSft-Gateway(){
 	case "$DISTRIBUTION" in 
 		freebsd )
 			sudo pkg $REPO_INSTALL_ARG -y ./scaleft-gateway-$highest_version.pkg
-			sudo sysrc sft-gatewayd_enable=YES
+			sudo mkdir /var/log/sft/sessions
+			sudo sysrc sft_gatewayd_enable=YES
 			sudo service sft-gatewayd start
 			;;
 		suse )
@@ -520,14 +531,14 @@ while getopts ":S:sg:cr:phf" opt; do
 			;;
 		h )
 			echo "Usage: LinuxAndBsdAsaInstall.sh [-s] [-S server_enrollment_token] [-g GATEWAY_TOKEN] [-c|-r [prod|test]] [-p] [-h] "
-			echo "	-s                          Install ASA Server Tools without providing an enrollment token."
-			echo "	-S server_enrollment_token  Install ASA Server Tools with the provided enrollment token."
-			echo "  -f                          Force re-installation of existing packages."
-			echo "	-g gateway_setup_token      Install ASA Gateway with the provided gateway token."
-			echo "	-c                          Install ASA Client Tools."
-			echo "	-r                          Set installation branch, default is prod."
-			echo "  -p                          Skip detection of TLS inspection web proxy."
-			echo "	-h                          Display this help message."
+			echo "    -s                          Install ASA Server Tools without providing an enrollment token."
+			echo "    -S server_enrollment_token  Install ASA Server Tools with the provided enrollment token."
+			echo "    -f                          Force re-installation of existing packages."
+			echo "    -g gateway_setup_token      Install ASA Gateway with the provided gateway token."
+			echo "    -c                          Install ASA Client Tools."
+			echo "    -r                          Set installation branch, default is prod."
+			echo "    -p                          Skip detection of TLS inspection web proxy."
+			echo "    -h                          Display this help message."
 			exit 0
 			;;
 		\? )
