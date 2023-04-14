@@ -22,6 +22,8 @@ At a high level, the script will:
 
 This script can be run interactively from the command line using arguments, or parameters can be set within the script for simple, automated execution.
 
+**_This script requires bash, awk, curl, and openssl to run successfully._**
+
 ```bash
 LinuxAndBsdAsaInstall.sh [-s] [-S server_enrollment_token] [-g GATEWAY_TOKEN] [-c|-r [prod|test]] [-p] [-h] 
     -s                          Install ASA Server Tools without providing an enrollment token.
