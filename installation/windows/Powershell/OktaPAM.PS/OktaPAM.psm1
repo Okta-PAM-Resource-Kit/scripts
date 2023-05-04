@@ -15,7 +15,7 @@
 
  .Example
    # Installs the OktaPAM Server Agent
-   Install-OktaPamServerTools -ToolsVersion 1.22.1
+   Install-OktaPAMServerTools -ToolsVersion 1.22.1
 #>
 
 function Get-URL-With-Authenticode(){
@@ -41,25 +41,25 @@ function Get-URL-With-Authenticode(){
             throw "error: signature for $($output) is invalid: $($sig.Status) from $($sig.SignerCertificate.ToString())"
         }
 
-        echo "$($output) is signed by OktaPAM"
+        echo "$($output) is signed by ScaleFT"
     }
 }
 
-function Stop-OktaPAMService(){
-    $installed = [bool](Get-Service -ErrorAction SilentlyContinue | Where-Object Name -eq "OktaPAM-server-tools")
+function Stop-ScaleFTService(){
+    $installed = [bool](Get-Service -ErrorAction SilentlyContinue | Where-Object Name -eq "scaleft-server-tools")
     if ($installed -eq $true) {
-        echo "Stoping Service OktaPAM-server-tools"
-        Stop-Service -Name "OktaPAM-server-tools"
+        echo "Stoping Service scaleft-server-tools"
+        Stop-Service -Name "scaleft-server-tools"
         return $true
     }
     return $false
 }
 
-function Start-OktaPAMService(){
-    $installed = [bool](Get-Service -ErrorAction SilentlyContinue | Where-Object Name -eq "OktaPAM-server-tools")
+function Start-ScaleFTService(){
+    $installed = [bool](Get-Service -ErrorAction SilentlyContinue | Where-Object Name -eq "scaleft-server-tools")
     if ($installed -eq $true) {
-        echo "Starting Service OktaPAM-server-tools"
-        Start-Service -Name "OktaPAM-server-tools"
+        echo "Starting Service scaleft-server-tools"
+        Start-Service -Name "scaleft-server-tools"
         return $true
     }
     return $false
@@ -79,7 +79,7 @@ function Install-OktaPamServerTools(){
             Write-Error "This command must be run as an administrator."
             return
         }
-        $installBaseUrl = "https://dist.OktaPAM.com/repos/windows/stable/amd64/server-tools"
+        $installBaseUrl = "https://dist.scaleft.com/repos/windows/stable/amd64/server-tools"
         $jsonUrl = "$($installBaseUrl)/dull.json"
         $jsonData = Invoke-RestMethod -Uri $jsonUrl
         $latestRelease = $jsonData.releases[0]
@@ -87,14 +87,14 @@ function Install-OktaPamServerTools(){
         $latestInstallerLink = ($latestRelease.links | where { $_.rel -eq "installer" }).href
         
         if ($PSBoundParameters.ContainsKey("ToolsVersion")) {
-            $installerURL = "$($installBaseUrl)/v$($ToolsVersion)/OktaPAM-Server-Tools-$($ToolsVersion).msi"
+            $installerURL = "$($installBaseUrl)/v$($ToolsVersion)/ScaleFT-Server-Tools-$($ToolsVersion).msi"
         } else {
             $installerURL = "$($installBaseUrl)/$($latestInstallerLink)"
         }
 
-        # Select Local System User, where the OktaPAM Server Agent Runs
+        # Select Local System User, where the ScaleFT Server Agent Runs
         $systemprofile = (Get-CIMInstance win32_userprofile  | where-object sid -eq "S-1-5-18" | select -ExpandProperty localpath)
-        $stateDir = Join-Path $systemprofile -ChildPath 'AppData' | Join-Path -ChildPath "Local" | Join-Path -ChildPath "OktaPAM"
+        $stateDir = Join-Path $systemprofile -ChildPath 'AppData' | Join-Path -ChildPath "Local" | Join-Path -ChildPath "ScaleFT"
     
         if ($PSBoundParameters.ContainsKey("EnrollmentToken")) {
             $tokenPath = Join-Path $stateDir -ChildPath "enrollment.token"
@@ -107,11 +107,11 @@ function Install-OktaPamServerTools(){
 
         Get-URL-With-Authenticode -url $installerURL -output $msiPath
 
-        $stopped = Stop-OktaPAMService
+        $stopped = Stop-ScaleFTService
 
         trap {
             if ($stopped -eq $true) {
-                Start-OktaPAMService
+                Start-ScaleFTService
             }
             break
         }
@@ -122,14 +122,14 @@ function Install-OktaPamServerTools(){
         $status = Start-Process -FilePath msiexec -ArgumentList /i,$msiPath,/qn,/L*V!,$msiLog  -Wait -PassThru
 
         if ($status.ExitCode -ne 0) {
-	        Start-OktaPAMService
+	        Start-ScaleFTService
             throw "msiexec failed with exit code: $($status.ExitCode) Log: $($msiLog)"
         }
 
         echo "Removing $($msiPath)"
         Remove-Item -Force $msiPath
 
-        Start-OktaPAMService
+        Start-ScaleFTService
     }
 }
 

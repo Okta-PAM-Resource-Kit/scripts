@@ -19,8 +19,8 @@ These modules are tested under PowerShell version 7
 ```Powershell
 mkdir 'C:\Program Files (x86)\WindowsPowerShell\Modules\OktaPAM.PS'
 cd 'C:\Program Files (x86)\WindowsPowerShell\Modules\OktaPAM.PS'
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/windows/Powershell/OktaPAM.PS/OktaPAM.PS.psd1
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/windows/Powershell/OktaPAM.PS/OktaPAM.psm1
+cmd /c "curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/windows/Powershell/OktaPAM.PS/OktaPAM.PS.psd1"
+cmd /c "curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/windows/Powershell/OktaPAM.PS/OktaPAM.psm1"
 ```
 
 2. Verify the module is available
