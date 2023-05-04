@@ -1,2 +1,6 @@
 # DS Store
 .DS_Store
+
+# Anything in a hold directory
+**/hold/*
+**/hold
