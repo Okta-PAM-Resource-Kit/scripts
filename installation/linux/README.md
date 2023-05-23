@@ -59,7 +59,7 @@ To automate installation using AWS EC2 User Data, GCP startup-script, or orchest
 
 ```bash
 #!/usr/bin/env bash
-#enroll into script-test-GCP project
+#Download, make executable, and launch install script with desired options.
 curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdAsaInstall.sh
 chmod +x LinuxAndBsdAsaInstall.sh
 ./LinuxAndBsdAsaInstall.sh -S enrollment_token
@@ -69,7 +69,7 @@ chmod +x LinuxAndBsdAsaInstall.sh
 
 ```bash
 #!/usr/bin/env bash
-#enroll into script-test-GCP project
+#Download, make executable, and launch install script with desired options.
 curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdAsaInstall.sh
 chmod +x LinuxAndBsdAsaInstall.sh
 ./LinuxAndBsdAsaInstall.sh -S enrollment_token -c
@@ -79,7 +79,7 @@ chmod +x LinuxAndBsdAsaInstall.sh
 
 ```bash
 #!/usr/bin/env bash
-#enroll into script-test-GCP project
+#Download, make executable, and launch install script with desired options.
 curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdAsaInstall.sh
 chmod +x LinuxAndBsdAsaInstall.sh
 ./LinuxAndBsdAsaInstall.sh -g setup_token
@@ -89,7 +89,7 @@ chmod +x LinuxAndBsdAsaInstall.sh
 
 ```bash
 #!/usr/bin/env bash
-#enroll into script-test-GCP project
+#Download, make executable, and launch install script with desired options.
 curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdAsaInstall.sh
 chmod +x LinuxAndBsdAsaInstall.sh
 ./LinuxAndBsdAsaInstall.sh -S enrollment_token -g setup_token
