@@ -434,7 +434,7 @@ function checkNoProxy() {
 	# Define your target domain and the expected public key fingerprints (SHA-256)
 	# Set target website and known fingerprints
 	website="dist.scaleft.com"
-	known_server_cert_sha256_fingerprint="CE0EED1EF71A5B8C1DD1BAD0A59148FF104F583542E5097E86C630EDC094EF50"
+	known_server_cert_sha256_fingerprint="46DBEC3BE9BF82793E7BCC8944A5E1A537FA6FB39671F0042E73240BA37B1231"
 	known_intermediate_cert_sha256_fingerprint="B0F330A31A0C50987E1C3A7BB02C2DDA682991D3165B517BD44FBA4A6020BD94"
 
 	# Get certificate chain
