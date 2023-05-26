@@ -322,7 +322,7 @@ function createSftGatewaySetupToken(){
 				GW_TOKEN_PATH=/var/db/sft-gatewayd
 				;;
 			* )
-				GATEWAY_TOKEN=/var/lib/sft-gatewayd
+				GW_TOKEN_PATH=/var/lib/sft-gatewayd
 				;;
 		esac
 
