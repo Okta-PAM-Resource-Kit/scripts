@@ -197,7 +197,7 @@ function updatePackageManager(){
 			echo -e "$rpm_art" | sudo tee /etc/yum.repos.d/oktapam.repo
 			
 			# Update package manager indexes
-			sudo $PACKAGE_MANAGER update -qy
+			sudo $PACKAGE_MANAGER makecache -qy
 			
 			;;
 		suse )
