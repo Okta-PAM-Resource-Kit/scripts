@@ -365,8 +365,8 @@ function createSftGwConfigRDP(){
 
 function setDefaultAdmin(){
 	# Create sftd lifecycle hook scripts to grant sftd created users sudo rights.
-	sudo mkdir /usr/lib/sftd/hooks/user-created.d
-	sudo mkdir /usr/lib/sftd/hooks/user-deleted.d
+	sudo mkdir -p /usr/lib/sftd/hooks/user-created.d
+	sudo mkdir -p /usr/lib/sftd/hooks/user-deleted.d
 	sftcreateuser=$(cat <<-EOF
 	#!/usr/bin/env bash
 
