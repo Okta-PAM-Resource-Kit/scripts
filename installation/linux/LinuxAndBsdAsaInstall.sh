@@ -554,7 +554,7 @@ check_required_executables
 INSTALLED_SOMETHING=false
 
 # Parse command line options for overrides to static variable sets
-while getopts ":S:G:sgcr:phf" opt; do
+while getopts ":S:G:sagcr:phf" opt; do
 	case ${opt} in
 		a )
 			DEFAULT_TO_ADMIN=true
