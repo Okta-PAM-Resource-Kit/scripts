@@ -374,31 +374,31 @@ function setDefaultAdmin(){
 	sudoers_file="/etc/sudoers.d/opa-admin"
 
 	# Check if the group already exists
-	if grep -qE "^$group_name:" /etc/group; then
-		echo "Group $group_name already exists."
+	if grep -qE "^\$group_name:" /etc/group; then
+	    echo "Group \$group_name already exists."
 	else
-		# Create the group
-		sudo groupadd $group_name
-		echo "Group $group_name created."
+	    # Create the group
+	    sudo groupadd \$group_name
+	    echo "Group \$group_name created."
 	fi
 
 	# Check if the sudoers file already exists
-	if [ -e "$sudoers_file" ]; then
-		echo "Sudoers file $sudoers_file already exists."
+	if [ -e "\$sudoers_file" ]; then
+	    echo "Sudoers file \$sudoers_file already exists."
 	else
-		# Create the sudoers file with no password prompt
-		echo "%$group_name ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee $sudoers_file
-		sudo chmod 440 $sudoers_file
-		echo "Sudoers file $sudoers_file created."
+	    # Create the sudoers file with no password prompt
+	    echo "%\$group_name ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee \$sudoers_file
+	    sudo chmod 440 \$sudoers_file
+	    echo "Sudoers file \$sudoers_file created."
 	fi
 
 	#Add new OPA user to the adm group
-	sudo usermod -aG opa-admin ${SFT_HOOK_USERNAME}
+	sudo usermod -aG opa-admin \${SFT_HOOK_USERNAME}
 
-	if [ $? -eq 0 ];then
-		echo "${SFT_HOOK_USERNAME} added to opa-admin group for full root privileges."
+	if [ \$? -eq 0 ];then
+	    echo "\${SFT_HOOK_USERNAME} added to opa-admin group for full root privileges."
 	else
-		echo "Error adding ${SFT_HOOK_USERNAME} to opa-admin group, no root privileges assigned."
+	    echo "Error adding \${SFT_HOOK_USERNAME} to opa-admin group, no root privileges assigned."
 	fi
 
 	EOF
@@ -409,20 +409,20 @@ function setDefaultAdmin(){
 	#!/usr/bin/env bash
 
 	#Remove OPA user from the adm group
-	sudo usermod -rG opa-admin ${SFT_HOOK_USERNAME}
+	sudo usermod -rG opa-admin \${SFT_HOOK_USERNAME}
 
-	if [ $? -eq 0 ];then
-		echo "${SFT_HOOK_USERNAME} removed from opa-admin group, revoking full root privileges."
+	if [ \$? -eq 0 ];then
+	    echo "\${SFT_HOOK_USERNAME} removed from opa-admin group, revoking full root privileges."
 	else
-		echo "Error removing ${SFT_HOOK_USERNAME} from opa-admin group, root privileges unchanged."
+	    echo "Error removing \${SFT_HOOK_USERNAME} from opa-admin group, root privileges unchanged."
 	fi
 
 	EOF
 	
 	)
 
-	echo -d "$sftcreateuser" | sudo tee /usr/lib/sftd/hooks/user-created.d/assign-opa-admin.sh
-	echo -d "$sftdeleteuser" | sudo tee /usr/lib/sftd/hooks/user-deleted.d/remove-opa-admin.sh
+	echo -e "$sftcreateuser" | sudo tee /usr/lib/sftd/hooks/user-created.d/assign-opa-admin.sh
+	echo -e "$sftdeleteuser" | sudo tee /usr/lib/sftd/hooks/user-deleted.d/remove-opa-admin.sh
 	sudo chmod 700 /usr/lib/sftd/hooks/user-created.d/assign-opa-admin.sh
 	sudo chmod 700 /usr/lib/sftd/hooks/user-deleted.d/remove-opa-admin.sh
 }
