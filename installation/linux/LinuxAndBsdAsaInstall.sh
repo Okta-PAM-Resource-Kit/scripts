@@ -36,6 +36,12 @@ REPOSITORY="prod"
 # the check by setting PROXY_CHECK_ENABLED=false below.
 PROXY_CHECK_ENABLED=true
 
+# In Okta Privilege Access, course grained privilege elevation (admin checkbox in UI) is not currently 
+# supported. Therefore users create by the sftd agent will be normal users with no sudo rights.  Change
+# the below value to true to have this script automatically create agent lifecycle hooks that well
+# force all sftd created users to have full sudo rights, just like checking the admin box in the ASA UI.
+DEFAULT_TO_ADMIN=false
+
 # By default, this script will not reinstall the current version of the ASA agents.  Change the below
 # value to "true" to force reinstallation.
 FORCE_REINSTALL=false
@@ -357,6 +363,70 @@ function createSftGwConfigRDP(){
 	echo -e "$sftgwcfg" | sudo tee /etc/sft/sft-gatewayd.yaml
 }
 
+function setDefaultAdmin(){
+	# Create sftd lifecycle hook scripts to grant sftd created users sudo rights.
+	sudo mkdir /usr/lib/sftd/hooks/user-created.d
+	sudo mkdir /usr/lib/sftd/hooks/user-deleted.d
+	sftcreateuser=$(cat <<-EOF
+	#!/usr/bin/env bash
+
+	group_name="opa-admin"
+	sudoers_file="/etc/sudoers.d/opa-admin"
+
+	# Check if the group already exists
+	if grep -qE "^$group_name:" /etc/group; then
+		echo "Group $group_name already exists."
+	else
+		# Create the group
+		sudo groupadd $group_name
+		echo "Group $group_name created."
+	fi
+
+	# Check if the sudoers file already exists
+	if [ -e "$sudoers_file" ]; then
+		echo "Sudoers file $sudoers_file already exists."
+	else
+		# Create the sudoers file with no password prompt
+		echo "%$group_name ALL=(ALL:ALL) NOPASSWD: ALL" | sudo tee $sudoers_file
+		sudo chmod 440 $sudoers_file
+		echo "Sudoers file $sudoers_file created."
+	fi
+
+	#Add new OPA user to the adm group
+	sudo usermod -aG opa-admin ${SFT_HOOK_USERNAME}
+
+	if [ $? -eq 0 ];then
+		echo "${SFT_HOOK_USERNAME} added to opa-admin group for full root privileges."
+	else
+		echo "Error adding ${SFT_HOOK_USERNAME} to opa-admin group, no root privileges assigned."
+	fi
+
+	EOF
+	
+	)
+	
+	sftdeleteuser=$(cat <<-EOF
+	#!/usr/bin/env bash
+
+	#Remove OPA user from the adm group
+	sudo usermod -rG opa-admin ${SFT_HOOK_USERNAME}
+
+	if [ $? -eq 0 ];then
+		echo "${SFT_HOOK_USERNAME} removed from opa-admin group, revoking full root privileges."
+	else
+		echo "Error removing ${SFT_HOOK_USERNAME} from opa-admin group, root privileges unchanged."
+	fi
+
+	EOF
+	
+	)
+
+	echo -d "$sftcreateuser" | sudo tee /usr/lib/sftd/hooks/user-created.d/assign-opa-admin.sh
+	echo -d "$sftdeleteuser" | sudo tee /usr/lib/sftd/hooks/user-deleted.d/remove-opa-admin.sh
+	sudo chmod 700 /usr/lib/sftd/hooks/user-created.d/assign-opa-admin.sh
+	sudo chmod 700 /usr/lib/sftd/hooks/user-deleted.d/remove-opa-admin.sh
+}
+
 function createSftGwConfig(){
 	# Create an ASA Gateway configuration file for handling only SSH traffic.
 	sudo mkdir -p /var/lib/sft-gatewayd
@@ -364,7 +434,7 @@ function createSftGwConfig(){
 	#Loglevel: debug
 	
 	LogFileNameFormats:
-		SSHRecording: "{{.Protocol}}~{{.StartTime}}~{{.TeamName}}~{{.ProjectName}}~{{.ServerName}}~{{.Username}}~"
+	  SSHRecording: "{{.Protocol}}~{{.StartTime}}~{{.TeamName}}~{{.ProjectName}}~{{.ServerName}}~{{.Username}}~"
 	
 	EOF
 
@@ -486,6 +556,9 @@ INSTALLED_SOMETHING=false
 # Parse command line options for overrides to static variable sets
 while getopts ":S:G:sgcr:phf" opt; do
 	case ${opt} in
+		a )
+			DEFAULT_TO_ADMIN=true
+		;;
 		s|S )
 			INSTALL_SERVER_TOOLS=true
 			if [[ "$OPTARG" =~ ^-.* ]]; then
@@ -523,6 +596,7 @@ while getopts ":S:G:sgcr:phf" opt; do
 			;;
 		h )
 			echo "Usage: LinuxAndBsdAsaInstall.sh [-s] [-S server_enrollment_token] [-g] [-G gateway_setup_token] [-c|-r [prod|test]] [-p] [-h] "
+			echo "    -a                          Create agent lifecycle hooks to grant sudo to all sftd created users."
 			echo "    -s                          Install ASA Server Tools without providing an enrollment token."
 			echo "    -S server_enrollment_token  Install ASA Server Tools with the provided enrollment token."
 			echo "    -f                          Force re-installation of existing packages."
@@ -586,6 +660,12 @@ fi
 if [[ "$INSTALL_CLIENT_TOOLS" == "true" ]];then
 	installSft
 	INSTALLED_SOMETHING=true
+fi
+
+# Perform necessary steps to force sftd created users to have sudo rights
+if [[ "$DEFAULT_TO_ADMIN" == "true" ]];then
+	setDefaultAdmin
+	echo "ScaleFT-Server-Tools lifecycle hooks created to ensure sftd provisioned users have sudo rights."
 fi
 
 if [[ "$INSTALLED_SOMETHING" == "false" ]];then
