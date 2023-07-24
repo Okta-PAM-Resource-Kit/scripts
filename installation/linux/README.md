@@ -28,8 +28,10 @@ This script can be run interactively from the command line using arguments, or p
 LinuxAndBsdAsaInstall.sh [-s] [-S server_enrollment_token] [-g GATEWAY_TOKEN] [-c|-r [prod|test]] [-p] [-h] 
     -s                          Install ASA Server Tools without providing an enrollment token.
     -S server_enrollment_token  Install ASA Server Tools with the provided enrollment token.
+    -a                          Set OPA created users to full sudo access by default.
     -f                          Force re-installation of existing packages.
-    -g gateway_setup_token      Install ASA Gateway with the provided gateway token.
+    -g                          Install ASA Gateway assuming device or setup tokens already exist.
+    -G gateway_setup_token      Install ASA Gateway with the provided gateway token.
     -c                          Install ASA Client Tools.
     -r                          Set installation branch, default is prod.
     -p                          Skip detection of TLS inspection web proxy.
