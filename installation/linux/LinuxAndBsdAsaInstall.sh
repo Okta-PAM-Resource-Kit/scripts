@@ -290,13 +290,13 @@ function createSftdConfig() {
 	sudo mkdir -p /etc/sft/
 
 	sftdcfg=$(cat <<-EOF
-	 
+	
 	---
-	 
+	
 	# CanonicalName: Specifies the name clients should use/see when connecting to this host.
-	 
+	
 	CanonicalName: "$INSTANCE_NAME"
-	 
+	
 	EOF
 	
 	)
