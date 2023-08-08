@@ -25,8 +25,7 @@ This script can be run interactively from the command line using arguments, or p
 **_This script requires bash, awk, curl, and openssl to run successfully._**
 
 ```bash
-LinuxAndBsdAsaInstall.sh [-s] [-S server_enrollment_token] [-g GATEWAY_TOKEN] [-c|-r [prod|test]] [-p] [-h] 
-    -a                          Create agent lifecycle hooks to grant sudo to all sftd created users.
+LinuxAndBsdAsaInstall.sh [-a] [-s] [-S server_enrollment_token] [-g GATEWAY_TOKEN] [-c|-r [prod|test]] [-p] [-h] 
     -s                          Install ASA Server Tools without providing an enrollment token.
     -S server_enrollment_token  Install ASA Server Tools with the provided enrollment token.
     -a                          Set OPA created users to full sudo access by default.
