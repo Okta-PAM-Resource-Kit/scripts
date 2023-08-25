@@ -15,6 +15,6 @@ echo. >> C:\sftd_bootstrap.log
 echo Added Enrollment Token to agent. >> C:\sftd_bootstrap.log
 
 :: Install latest Windows Server name
-msiexec /qn -i https://dist.scaleft.com/server-tools/windows/latest/ScaleFT-Server-Tools-latest.msi >> C:\sftd_bootstrap.log 2>&1
+msiexec /qn -i https://dist.scaleft.com/repos/windows/stable/amd64/server-tools/v1.73.2/ScaleFT-Server-Tools-1.73.2.msi >> C:\sftd_bootstrap.log 2>&1
 echo. >> C:\sftd_bootstrap.log
 echo Installed ASA Server Agent. >> C:\sftd_bootstrap.log
