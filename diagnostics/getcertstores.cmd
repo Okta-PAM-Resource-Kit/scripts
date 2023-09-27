@@ -82,17 +82,14 @@ if "%SERVER_TYPE%"=="DC" (
     echo. >> %OUTPUT_FILE%
     certutil -store %VERBOSE% "ldap:///CN=NTAuthCertificates,CN=Public Key Services,CN=Services,CN=Configuration,!DOMAIN_DN!" >> %OUTPUT_FILE%
     echo. >> %OUTPUT_FILE%
-    echo #################### >> %OUTPUT_FILE%
-    echo ## Local/Personal ## >> %OUTPUT_FILE%
-    echo #################### >> %OUTPUT_FILE%
-    echo. >> %OUTPUT_FILE%
-    certutil -store %VERBOSE% "My" >> %OUTPUT_FILE%
+
 ) else (
     REM Server is a member server
     echo ################################### >> %OUTPUT_FILE%
     echo #### This is a Member Server.  #### >> %OUTPUT_FILE%
     echo ################################### >> %OUTPUT_FILE%
     echo. >> %OUTPUT_FILE%
+    
 )
 
 echo Information has been written to %OUTPUT_FILE%
