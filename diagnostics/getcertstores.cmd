@@ -43,6 +43,7 @@ echo ## Enterprise NTAuth store: ## >> %OUTPUT_FILE%
 echo ############################## >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
 certutil -enterprise -store %VERBOSE% NTAuth >> %OUTPUT_FILE%
+echo. >> %OUTPUT_FILE%
 
 REM Print the local Root, CA, and NTAuth stores
 echo ######################### >> %OUTPUT_FILE%
