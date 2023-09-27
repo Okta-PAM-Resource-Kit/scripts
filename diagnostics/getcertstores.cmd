@@ -58,7 +58,12 @@ echo ######################### >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
 certutil -store %VERBOSE% CA >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
-
+echo ############################### >> %OUTPUT_FILE%
+echo #### Local Personal store: #### >> %OUTPUT_FILE%
+echo ############################### >> %OUTPUT_FILE%
+echo. >> %OUTPUT_FILE%
+certutil -store %VERBOSE% My >> %OUTPUT_FILE%
+echo. >> %OUTPUT_FILE%
 
 
 if "%SERVER_TYPE%"=="DC" (
