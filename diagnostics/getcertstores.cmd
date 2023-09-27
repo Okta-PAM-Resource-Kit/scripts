@@ -25,24 +25,39 @@ echo ################################################################ >> %OUTPUT
 echo. >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
 
-REM Print the Root, CA, and NTAuth stores
-echo ################### >> %OUTPUT_FILE%
-echo ### Root store: ### >> %OUTPUT_FILE%
-echo ################### >> %OUTPUT_FILE%
+REM Print the Enterprise Root, CA, and NTAuth stores
+echo ############################## >> %OUTPUT_FILE%
+echo ### Enterprise Root store: ### >> %OUTPUT_FILE%
+echo ############################## >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
 certutil -enterprise -store %VERBOSE% Root >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
-echo ################### >> %OUTPUT_FILE%
-echo #### CA store: #### >> %OUTPUT_FILE%
-echo ################### >> %OUTPUT_FILE%
+echo ############################## >> %OUTPUT_FILE%
+echo #### Enterprise CA store: #### >> %OUTPUT_FILE%
+echo ############################## >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
 certutil -enterprise -store %VERBOSE% CA >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
-echo ################### >> %OUTPUT_FILE%
-echo ## NTAuth store: ## >> %OUTPUT_FILE%
-echo ################### >> %OUTPUT_FILE%
+echo ############################## >> %OUTPUT_FILE%
+echo ## Enterprise NTAuth store: ## >> %OUTPUT_FILE%
+echo ############################## >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
 certutil -enterprise -store %VERBOSE% NTAuth >> %OUTPUT_FILE%
+
+REM Print the local Root, CA, and NTAuth stores
+echo ######################### >> %OUTPUT_FILE%
+echo ### Local Root store: ### >> %OUTPUT_FILE%
+echo ######################### >> %OUTPUT_FILE%
+echo. >> %OUTPUT_FILE%
+certutil -store %VERBOSE% Root >> %OUTPUT_FILE%
+echo. >> %OUTPUT_FILE%
+echo ######################### >> %OUTPUT_FILE%
+echo #### Local CA store: #### >> %OUTPUT_FILE%
+echo ######################### >> %OUTPUT_FILE%
+echo. >> %OUTPUT_FILE%
+certutil -store %VERBOSE% CA >> %OUTPUT_FILE%
+echo. >> %OUTPUT_FILE%
+
 
 
 if "%SERVER_TYPE%"=="DC" (
