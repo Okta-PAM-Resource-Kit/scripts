@@ -1,6 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 
+set VERBOSE=
+if "%~1"=="-v" set VERBOSE=-v
+
 REM Define the output file
 set OUTPUT_FILE=%COMPUTERNAME%_certificates_output.txt
 
@@ -27,19 +30,19 @@ echo ################### >> %OUTPUT_FILE%
 echo ### Root store: ### >> %OUTPUT_FILE%
 echo ################### >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
-certutil -enterprise -store -v Root >> %OUTPUT_FILE%
+certutil -enterprise -store %VERBOSE% Root >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
 echo ################### >> %OUTPUT_FILE%
 echo #### CA store: #### >> %OUTPUT_FILE%
 echo ################### >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
-certutil -enterprise -store -v CA >> %OUTPUT_FILE%
+certutil -enterprise -store %VERBOSE% CA >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
 echo ################### >> %OUTPUT_FILE%
 echo ## NTAuth store: ## >> %OUTPUT_FILE%
 echo ################### >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
-certutil -enterprise -store -v NTAuth >> %OUTPUT_FILE%
+certutil -enterprise -store %VERBOSE% NTAuth >> %OUTPUT_FILE%
 
 
 if "%SERVER_TYPE%"=="DC" (
@@ -56,13 +59,13 @@ if "%SERVER_TYPE%"=="DC" (
     echo ## for domain !DOMAIN_DN!: ## >> %OUTPUT_FILE%
     echo ################################### >> %OUTPUT_FILE%
     echo. >> %OUTPUT_FILE%
-    certutil -store -v "ldap:///CN=NTAuthCertificates,CN=Public Key Services,CN=Services,CN=Configuration,!DOMAIN_DN!" >> %OUTPUT_FILE%
+    certutil -store %VERBOSE% "ldap:///CN=NTAuthCertificates,CN=Public Key Services,CN=Services,CN=Configuration,!DOMAIN_DN!" >> %OUTPUT_FILE%
     echo. >> %OUTPUT_FILE%
     echo #################### >> %OUTPUT_FILE%
     echo ## Local/Personal ## >> %OUTPUT_FILE%
     echo #################### >> %OUTPUT_FILE%
     echo. >> %OUTPUT_FILE%
-    certutil -store -v "My" >> %OUTPUT_FILE%
+    certutil -store %VERBOSE% "My" >> %OUTPUT_FILE%
 ) else (
     REM Server is a member server
     echo ################################### >> %OUTPUT_FILE%
