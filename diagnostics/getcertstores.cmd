@@ -4,13 +4,13 @@ setlocal enabledelayedexpansion
 set VERBOSE=
 if "%~1"=="-v" set VERBOSE=-v
 
-REM Define the output file
+:: Define the output file
 set OUTPUT_FILE=%COMPUTERNAME%_certificates_output.txt
 
-REM Delete the output file if it already exists
+:: Delete the output file if it already exists
 if exist %OUTPUT_FILE% del %OUTPUT_FILE%
 
-REM Check if the server is a domain controller using PowerShell
+:: Check if the server is a domain controller using PowerShell
 for /f "delims=" %%i in ('powershell -command "if(Get-WindowsFeature -Name 'AD-Domain-Services' | Where-Object { $_.InstallState -eq 'Installed' }) { Write-Output 'DC' } else { Write-Output 'Member' }"') do set SERVER_TYPE=%%i
 
 if "%SERVER_TYPE%"=="DC" (
@@ -25,7 +25,7 @@ echo ################################################################ >> %OUTPUT
 echo. >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
 
-REM Print the Enterprise Root, CA, and NTAuth stores
+:: Print the Enterprise Root, CA, and NTAuth stores
 echo ############################## >> %OUTPUT_FILE%
 echo ### Enterprise Root store: ### >> %OUTPUT_FILE%
 echo ############################## >> %OUTPUT_FILE%
@@ -45,7 +45,7 @@ echo. >> %OUTPUT_FILE%
 certutil -enterprise -store %VERBOSE% NTAuth >> %OUTPUT_FILE%
 echo. >> %OUTPUT_FILE%
 
-REM Print the local Root, CA, and NTAuth stores
+:: Print the local Root, CA, and NTAuth stores
 echo ######################### >> %OUTPUT_FILE%
 echo ### Local Root store: ### >> %OUTPUT_FILE%
 echo ######################### >> %OUTPUT_FILE%
@@ -67,12 +67,12 @@ echo. >> %OUTPUT_FILE%
 
 
 if "%SERVER_TYPE%"=="DC" (
-    REM Get the local domain DN (Distinguished Name) using PowerShell
+    :: Get the local domain DN (Distinguished Name) using PowerShell
     for /f "delims=" %%i in ('powershell -command "$d = (Get-ADDomain).DistinguishedName; Write-Output $d"') do set DOMAIN_DN=%%i
 
-    REM Server is a domain controller
+    :: Server is a domain controller
     echo. >> %OUTPUT_FILE%
-    REM Print the ldap NTAuthCertificates store for the local domain
+    :: Print the ldap NTAuthCertificates store for the local domain
     echo ######################################## >> %OUTPUT_FILE%
     echo ## This is a Domain Controller.       ## >> %OUTPUT_FILE%
     echo ## ldap NTAuthCertificates store      ## >> %OUTPUT_FILE%
@@ -81,18 +81,21 @@ if "%SERVER_TYPE%"=="DC" (
     echo. >> %OUTPUT_FILE%
     certutil -store %VERBOSE% "ldap:///CN=NTAuthCertificates,CN=Public Key Services,CN=Services,CN=Configuration,!DOMAIN_DN!" >> %OUTPUT_FILE%
     echo. >> %OUTPUT_FILE%
-    REM Print the ldap Certificateion Authorities store for the local domain
+    :: Print the ldap Certificateion Authorities store for the local domain
     echo ######################################## >> %OUTPUT_FILE%
     echo ## This is a Domain Controller.       ## >> %OUTPUT_FILE%
     echo ## ldap Certificate Authorities store ## >> %OUTPUT_FILE%
     echo ## for domain !DOMAIN_DN!: ## >> %OUTPUT_FILE%
     echo ######################################## >> %OUTPUT_FILE%
     echo. >> %OUTPUT_FILE%
-    certutil -store %VERBOSE% "ldap:///CN=Certification Authorities,CN=Public Key Services,CN=Services,CN=Configuration,!DOMAIN_DN!" >> %OUTPUT_FILE%
+    :: Set LDAP Path
+    set "LDAP_PATH=LDAP://CN=Certification Authorities,CN=Public Key Services,CN=Services,CN=Configuration,DC=YourDomain,DC=com"
+    :: Run PowerShell Command and Call certutil for Each Object
+    powershell -Command "& { $de = New-Object System.DirectoryServices.DirectoryEntry('%LDAP_PATH%'); $de.Children | ForEach-Object { $dn = $_.distinguishedName; & certutil -store -v '$dn' } }" > "%OUTPUT_FILE%"
     echo. >> %OUTPUT_FILE%
 
 ) else (
-    REM Server is a member server
+    :: Server is a member server
     echo ################################### >> %OUTPUT_FILE%
     echo #### This is a Member Server.  #### >> %OUTPUT_FILE%
     echo ################################### >> %OUTPUT_FILE%
