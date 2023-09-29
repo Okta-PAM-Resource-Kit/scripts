@@ -72,15 +72,25 @@ if "%SERVER_TYPE%"=="DC" (
 
     REM Server is a domain controller
     echo. >> %OUTPUT_FILE%
-    echo ################################### >> %OUTPUT_FILE%
-    echo ## This is a Domain Controller.  ## >> %OUTPUT_FILE%
+    echo ######################################## >> %OUTPUT_FILE%
+    echo ## This is a Domain Controller.       ## >> %OUTPUT_FILE%
     
     REM Print the ldap NTAuthCertificates store for the local domain
-    echo ## ldap NTAuthCertificates store ## >> %OUTPUT_FILE%
+    echo ## ldap NTAuthCertificates store      ## >> %OUTPUT_FILE%
     echo ## for domain !DOMAIN_DN!: ## >> %OUTPUT_FILE%
-    echo ################################### >> %OUTPUT_FILE%
+    echo ######################################## >> %OUTPUT_FILE%
     echo. >> %OUTPUT_FILE%
     certutil -store %VERBOSE% "ldap:///CN=NTAuthCertificates,CN=Public Key Services,CN=Services,CN=Configuration,!DOMAIN_DN!" >> %OUTPUT_FILE%
+    echo. >> %OUTPUT_FILE%
+    echo ######################################## >> %OUTPUT_FILE%
+    echo ## This is a Domain Controller.       ## >> %OUTPUT_FILE%
+    
+    REM Print the ldap NTAuthCertificates store for the local domain
+    echo ## ldap Certificate Authorities store ## >> %OUTPUT_FILE%
+    echo ## for domain !DOMAIN_DN!: ## >> %OUTPUT_FILE%
+    echo ######################################## >> %OUTPUT_FILE%
+    echo. >> %OUTPUT_FILE%
+    certutil -store %VERBOSE% "ldap:///CN=Certification Authorities,CN=Public Key Services,CN=Services,CN=Configuration,!DOMAIN_DN!" >> %OUTPUT_FILE%
     echo. >> %OUTPUT_FILE%
 
 ) else (
@@ -89,7 +99,7 @@ if "%SERVER_TYPE%"=="DC" (
     echo #### This is a Member Server.  #### >> %OUTPUT_FILE%
     echo ################################### >> %OUTPUT_FILE%
     echo. >> %OUTPUT_FILE%
-    
+
 )
 
 echo Information has been written to %OUTPUT_FILE%
