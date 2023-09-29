@@ -90,9 +90,20 @@ if "%SERVER_TYPE%"=="DC" (
     echo. >> %OUTPUT_FILE%
     :: Set LDAP Path
     set "LDAP_PATH=LDAP://CN=Certification Authorities,CN=Public Key Services,CN=Services,CN=Configuration,!DOMAIN_DN!"
-    :: Run PowerShell Command and Call certutil for Each Object
-    powershell -Command "& { $de = New-Object System.DirectoryServices.DirectoryEntry('%LDAP_PATH%'); $de.Children | ForEach-Object { $dn = $_.distinguishedName; & certutil -store '%VERBOSE%' '$dn' } }" >> "%OUTPUT_FILE%"
+    :: Set Output List File
+    set "LIST_FILE=.\dn_list.txt"
+
+    :: Run PowerShell Command to Enumerate DNs
+    powershell -Command "& { $de = New-Object System.DirectoryServices.DirectoryEntry('!LDAP_PATH!'); $de.Children | ForEach-Object { $dn = $_.distinguishedName; Write-Output $dn | Out-File -Encoding ascii -Append -FilePath '!LIST_FILE!' } }"
+
+    :: Iterate over DNs and call certutil
+    for /f "tokens=*" %%i in (!LIST_FILE!) do (
+       certutil -store %VERBOSE% "%%i" >> "%OUTPUT_FILE%"
+       echo. >> %OUTPUT_FILE%
+    )    
     echo. >> %OUTPUT_FILE%
+    :: Clean up
+    if exist "!LIST_FILE!" del "!LIST_FILE!"
 
 ) else (
     :: Server is a member server
