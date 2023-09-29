@@ -89,9 +89,9 @@ if "%SERVER_TYPE%"=="DC" (
     echo ######################################## >> %OUTPUT_FILE%
     echo. >> %OUTPUT_FILE%
     :: Set LDAP Path
-    set "LDAP_PATH=LDAP://CN=Certification Authorities,CN=Public Key Services,CN=Services,CN=Configuration,DC=YourDomain,DC=com"
+    set "LDAP_PATH=LDAP://CN=Certification Authorities,CN=Public Key Services,CN=Services,CN=Configuration,!DOMAIN_DN!"
     :: Run PowerShell Command and Call certutil for Each Object
-    powershell -Command "& { $de = New-Object System.DirectoryServices.DirectoryEntry('%LDAP_PATH%'); $de.Children | ForEach-Object { $dn = $_.distinguishedName; & certutil -store -v '$dn' } }" > "%OUTPUT_FILE%"
+    powershell -Command "& { $de = New-Object System.DirectoryServices.DirectoryEntry('%LDAP_PATH%'); $de.Children | ForEach-Object { $dn = $_.distinguishedName; & certutil -store '%VERBOSE%' '$dn' } }" >> "%OUTPUT_FILE%"
     echo. >> %OUTPUT_FILE%
 
 ) else (
