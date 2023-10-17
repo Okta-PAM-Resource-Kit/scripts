@@ -2,7 +2,7 @@
 
 ## Overview
 
-LinuxAndBsdAsaInstall.sh is intended to function as a universal install script for support Linux and BSD versions of the ASA Server Tools, ASA Gateway and RDP session Transcoder, and ASA Client Tools.  
+LinuxAndBsdAsaInstall.sh is intended to function as a universal install script for support Linux and BSD versions of the OPA/ASA Server Tools, OPA/ASA Gateway and RDP session Transcoder, and OPA/ASA Client Tools.  
 
 **_These scripts are not supported by Okta, and no warranty is expressed or implied.  Please review and understand all scripts before using.  Use at your own risk._**
 
@@ -10,13 +10,13 @@ LinuxAndBsdAsaInstall.sh is intended to function as a universal install script f
 
 At a high level, the script will:
 
-* Add the ASA repos to the local package manager when possible, allowing easy updates using standard tools
+* Add the OPA/ASA repos to the local package manager when possible, allowing easy updates using standard tools
 * Test for the presence of TLS inspection (MITM) which would interfere with outbound calls to Okta
 * Extract a useful server name from the "Name" tag in AWS.  (_Allow tags in instance metadata_ must be enabled.)
 * Create default configuration files for ASA Server Tools and ASA Gateway
 * Create enrollment token file for ASA Server Tools
 * Create setup token file for ASA Gateway
-* And finally, install ASA Server Tools, ASA Gateway (and Transcoder on RDP capable OSes), ASA Client Tools, or any combination of the three.
+* And finally, install OPA/ASA Server Tools, OPA/ASA Gateway (and Transcoder on RDP capable OSes), OPA/ASA Client Tools, or any combination of the three.
 
 ## Usage
 
