@@ -17,8 +17,8 @@ These modules are tested under PowerShell version 7
 1. Copy the entire module folder, OktaPAM.PS, into 'C:\Program Files (x86)\WindowsPowerShell\Modules'
 
 ```Powershell
-mkdir 'C:\Program Files (x86)\WindowsPowerShell\Modules\OktaPAM.PS'
-cd 'C:\Program Files (x86)\WindowsPowerShell\Modules\OktaPAM.PS'
+mkdir "C:\Program Files (x86)\WindowsPowerShell\Modules\OktaPAM.PS"
+cd "C:\Program Files (x86)\WindowsPowerShell\Modules\OktaPAM.PS"
 cmd /c "curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/windows/Powershell/OktaPAM.PS/OktaPAM.PS.psd1"
 cmd /c "curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/windows/Powershell/OktaPAM.PS/OktaPAM.psm1"
 ```
