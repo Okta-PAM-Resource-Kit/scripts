@@ -94,5 +94,5 @@ chmod +x LinuxAndBsdAsaInstall.sh
 #Download, make executable, and launch install script with desired options.
 curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdAsaInstall.sh
 chmod +x LinuxAndBsdAsaInstall.sh
-./LinuxAndBsdAsaInstall.sh -S enrollment_token -g setup_token
+./LinuxAndBsdAsaInstall.sh -S enrollment_token -G setup_token
 ```

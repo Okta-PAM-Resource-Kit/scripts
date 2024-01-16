@@ -120,7 +120,7 @@ function getOsData(){
 		amzn )
 			DISTRIBUTION="amazonlinux"
 			;;
-		rocky )
+		rocky|ol )
 			getVersionInteger
 			DISTRIBUTION="rhel"
 			;;
@@ -203,7 +203,7 @@ function updatePackageManager(){
 			echo -e "$rpm_art" | sudo tee /etc/yum.repos.d/oktapam.repo
 			
 			# Update package manager indexes
-			sudo $PACKAGE_MANAGER makecache -qy
+			sudo $PACKAGE_MANAGER makecache -q -y
 			
 			;;
 		suse )
@@ -470,7 +470,7 @@ function installSft(){
 			sudo $PACKAGE_MANAGER -q -n $REPO_INSTALL_ARG scaleft-client-tools
 			;;
 		* )
-			sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-client-tools -qy
+			sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-client-tools -q -y
 			;;
 	esac
 }
@@ -478,7 +478,7 @@ function installSft(){
 function installSft-Gateway(){
 	# Install ASA Gateway
 	if [[ "$DISTRIBUTION" == "rhel" && "$VERSION" == "8" ]] || [[ "$DISTRIBUTION" == "ubuntu" && ( "$VERSION" == "20.04" || "$VERSION" == "22.04" ) ]]; then
-		sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-rdp-transcoder -qy
+		sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-rdp-transcoder -q -y
 		createSftGwConfigRDP
 	else
 		createSftdConfig
@@ -494,7 +494,7 @@ function installSft-Gateway(){
 			sudo $PACKAGE_MANAGER -q -n $REPO_INSTALL_ARG scaleft-gateway
 			;;
 		* )
-			sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-gateway -qy
+			sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-gateway -q -y
 			;;
 	esac
 }
