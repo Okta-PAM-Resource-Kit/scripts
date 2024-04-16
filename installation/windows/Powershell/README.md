@@ -1,4 +1,4 @@
-# OktaPAM-PowerShell: Tools for installing OktaPAM (ASA) ServerTools with PowerShell
+# OktaPAM-PowerShell: Tools for installing OPA/ASA ServerTools with PowerShell
 
 **_These modules are not supported by Okta, and no warranty is expressed or implied.  Please review and understand all modules before using.  Use at your own risk._**
 
