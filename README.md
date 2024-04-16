@@ -4,4 +4,4 @@
 
 ## Overview
 
-This repo contains agent installation and diagnostic scripts for Okta Advanced Server Access.  They are meant to serve as a starting point to help teams quickly deploy and evaluate ASA, or even bootstrap fleetwide adoption.  Feel free to use them as is or customize them to meet your needs.  
+This repo contains agent installation and diagnostic scripts for Okta Advanced Server Access.  They are meant to serve as a starting point to help teams quickly deploy and evaluate OPA or ASA, or even bootstrap fleetwide adoption.  Feel free to use them as is or customize them to meet your needs.  
