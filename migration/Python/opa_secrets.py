@@ -15,16 +15,6 @@ project_id = "<<Project ID>>"
 secret_id = "<<Secret ID for updates>>" #hardcoded for this script as demo here but can be dynamic
 parent_secret_folder_id = "<<Secret Parent folder ID>>"
 
-def load_configuration():
-    global host, team, client, secret, resource_group_id, project_id, parent_secret_folder_id
-    host = get_or_raise_env_var("OKTAPAM_API_HOST")
-    team = get_or_raise_env_var("OKTAPAM_TEAM")
-    client = get_or_raise_env_var("OKTAPAM_KEY")
-    secret = get_or_raise_env_var("OKTAPAM_SECRET")
-    resource_group_id = get_or_raise_env_var("OKTAPAM_RESOURCE_GROUP_ID")
-    project_id = get_or_raise_env_var("OKTAPAM_PROJECT_ID")
-    parent_secret_folder_id = get_or_raise_env_var("OKTAPAM_PARENT_SECRET_FOLDER_ID")
-
 def get_or_raise_env_var(var: str) -> str:
     try:
         val = os.environ[var]
@@ -147,7 +137,6 @@ def reveal_secret(bearer: str, secret_id: str):
     print(f"revealed the secret with id of {secret_id} and secret of '{decrypted_secret}'")
 
 def main():
-  #  load_configuration()
     bearer = login()
     key = get_jwks(bearer)
     print("key --->> " + key)
