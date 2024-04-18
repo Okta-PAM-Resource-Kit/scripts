@@ -7,7 +7,7 @@ OR
 CSV
 Sample CSV file. Make sure you include the header line as the first record.
 resourceGroup,project,path,key,value,name,description
-Jo_DevelopmentResources,Secrets,OktaApiKeys,cyberArk1,testIng001,cyberArkSafe1,secrets from Safe1
+Jo_DevelopmentResources,Secrets,OktaApiKeys,apikey1,testIng001,devopskeys,creds for deveops script1
 #>
 function CreateSecrets() {
 
