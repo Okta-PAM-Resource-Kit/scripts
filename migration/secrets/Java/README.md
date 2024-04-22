@@ -1,31 +1,31 @@
-Java program to migrate credentials from Hashicorp vault to Okta vault has been developed using Springboot framework.
+# Java program to migrate credentials from Hashicorp vault to Okta vault has been developed using Springboot framework.
 
 Following Environment details are required to run this program.
 
-#Okta PAM URL
+# Okta PAM URL
 register.oktapam.host=https://<<Okta Subdomain>>.pam.oktapreview.com
-#Relative URI with OPA Team NAme
+# Relative URI with OPA Team Name
 register.oktapam.apiuri=/v1/teams/<<PAM Team Name>>
-#Create OPA Service User in OPA and copy the Key ID
+# Create OPA Service User in OPA and copy the Key ID
 register.oktapam.clientID=<<OPA Service user Key ID>>
-#Create OPA Service User in OPA and copy the Key Secret
+# Create OPA Service User in OPA and copy the Key Secret
 register.oktapam.clientSecret=<<OPA Service user Key Secret>>
-#Resource Group ID of the resource where secret will be migrated
+# Resource Group ID of the resource where secret will be migrated
 register.oktapam.resourceGroupId=<<Resource Group ID>>
-#Project Group ID of the resource where secret will be migrated
+# Project Group ID of the resource where secret will be migrated
 register.oktapam.projectId=<<Project ID>>
 # Parent folder where Secret will be migrated. Service user must have full access to the folder by policy
 register.oktapam.parentSecretFolderId=<<Secret Folder ID where child folder will be created and Secret will be migrated>>
 # Generic Description addedd to secret and child folders during secret migration
 register.oktapam.secretFolderDesc=Migrated from Hashicorp vault
 
-#Get OPA Token api Endpoint (Do not change)
+# Get OPA Token api Endpoint (Do not change)
 register.oktapam.tokenendpoint=/service_token
 register.oktapam.jwksEndpoint=/vault/jwks.json
 register.oktapam.createSecretEndpoint=/secrets
 register.oktapam.createFolderEndpoint=/secret_folders
 
-#Get Hashicorp environment details
+# Get Hashicorp environment details
 # Hashicorp Vault host ip
 register.hashicorp.host=<<Host IP>>
 # Hashicorp Vault host port
