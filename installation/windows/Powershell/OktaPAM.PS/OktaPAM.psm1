@@ -3,19 +3,22 @@
   Installs the OktaPAM Server Toools
 
  .Description
-  Installs the OktaPAM Server Tools to a specific version, and if installing for the first time
+  Installs the OktaPAM Server or Client Tools to a specific version, and if installing for the first time
   will set the configuration file with various values.
 
  .Parameter ToolsVersion
-  Optional, version of the OktaPAM Server Tools to Install. If not supplied, the latest available
+  Optional, version of the OktaPAM Server or Client Tools to Install. If not supplied, the latest available
   version is installed.
 
  .Parameter EnrollmentToken
   Optionally sets the OktaPAM Enrollment Token 
 
+ .Parameter AllUsers
+  Optionally force the Client-Tools to be installed for all users
+
  .Example
    # Installs the OktaPAM Server Agent
-   Install-OktaPAMServerTools -ToolsVersion 1.22.1
+   Install-OktaPAMServerTools -ToolsVersion 1.74.1
 #>
 
 function Get-URL-With-Authenticode(){
