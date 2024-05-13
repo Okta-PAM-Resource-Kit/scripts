@@ -133,4 +133,56 @@ function Install-OktaPamServerTools(){
     }
 }
 
-Export-ModuleMember -function Install-OktaPamServerTools
+function Install-OktaPamClientTools(){
+    param(
+        [Parameter(Mandatory=$false)][string]$EnrollmentToken,
+        [Parameter(Mandatory=$false)][string]$ToolsVersion,
+        [Parameter(Mandatory=$false)][bool]$AllUsers = $false
+    )
+    process{
+        $ErrorActionPreference = "Stop";
+        # Check that the function is being run as administator.
+        if ($AllUsers) {
+            if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+                Write-Error "This command must be run as an administrator."
+                return
+            }
+        }
+        $installBaseUrl = "https://dist.scaleft.com/repos/windows/stable/amd64/windows-client"
+        $jsonUrl = "$($installBaseUrl)/dull.json"
+        $jsonData = Invoke-RestMethod -Uri $jsonUrl
+        $latestRelease = $jsonData.releases[0]
+        $latestVersion = $latestRelease.version
+        $latestInstallerLink = ($latestRelease.links | where { $_.rel -eq "installer" }).href
+        
+        if ($PSBoundParameters.ContainsKey("ToolsVersion")) {
+            $installerURL = "$($installBaseUrl)/v$($ToolsVersion)/ScaleFT-$($ToolsVersion).msi"
+        } else {
+            $installerURL = "$($installBaseUrl)/$($latestInstallerLink)"
+        }
+
+        $msiPath = [System.IO.Path]::ChangeExtension([System.IO.Path]::GetTempFileName(), '.msi')
+        $msiLog = [System.IO.Path]::ChangeExtension($msiPath, '.log')
+
+        Get-URL-With-Authenticode -url $installerURL -output $msiPath
+
+        echo "Starting msiexec on $($msiPath)"
+        echo "MSI Log path: $($msiLog)"
+
+        if ($AllUsers) {
+            $status = Start-Process -FilePath msiexec -ArgumentList /i,$msiPath,/qn,/L*V!,$msiLog,"ALLUSERS=1"  -Wait -PassThru
+        } else {
+            $status = Start-Process -FilePath msiexec -ArgumentList /i,$msiPath,/qn,/L*V!,$msiLog  -Wait -PassThru
+        }
+
+        if ($PSBoundParameters.ContainsKey("EnrollmentToken")) {
+            $status = Start-Process -FilePath sft -ArgumentList "fleet","enroll","--token",$EnrollmentToken -Wait -PassThru
+        }
+        
+        echo "Removing $($msiPath)"
+        Remove-Item -Force $msiPath
+
+    }
+}
+
+Export-ModuleMember -function Install-OktaPamServerTools, Install-OktaPamClientTools
