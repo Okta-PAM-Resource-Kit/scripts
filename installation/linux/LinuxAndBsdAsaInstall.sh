@@ -477,11 +477,11 @@ function installSft(){
 
 function installSft-Gateway(){
 	# Install ASA Gateway
-	if [[ "$DISTRIBUTION" == "rhel" && "$VERSION" == "8" ]] || [[ "$DISTRIBUTION" == "ubuntu" && ( "$VERSION" == "20.04" || "$VERSION" == "22.04" ) ]]; then
+	if [[ "$DISTRIBUTION" == "rhel" && ( "$VERSION" == "8" || "$VERSION" == "9" ) ]] || [[ "$DISTRIBUTION" == "ubuntu" && ( "$VERSION" == "20.04" || "$VERSION" == "22.04" ) ]]; then
 		sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-rdp-transcoder -q -y
 		createSftGwConfigRDP
 	else
-		createSftdConfig
+		createSftGwConfig
 	fi
 	case "$DISTRIBUTION" in 
 		freebsd )
