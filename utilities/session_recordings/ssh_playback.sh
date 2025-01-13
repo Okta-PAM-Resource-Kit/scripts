@@ -25,10 +25,10 @@ IFS=$'\n'
 #files+=($(sudo bash -c "cd ${recpath}; ls -1trsh ${prefix}*.asa" | awk '$1 != "total" && $1 != "0" {print $1, $2}'))
 
 for file in $(sudo bash -c "cd ${recpath}; ls -1trh ${prefix}*.asa"); do
-  echo ${file}
+#  echo ${file}
   full_path="/var/log/sft/sessions/${file}"
-  echo ${full_path}
-  if sudo bash -c "head -c 1024 ${full_path} | grep -q 'pty-req'"; then
+#  echo ${full_path}
+  if sudo bash -c "head -c 2048 ${full_path} | grep -q 'pty-req'"; then
     size=$(sudo bash -c "stat --format='%s' ${full_path}")
     IFS=$'~'
     fields=()
