@@ -9,10 +9,15 @@ terraform {
   }
 }
 
-### retrieve necessary credentials and team details to interact with OPA API
+### retrieve necessary credentials and team details to interact with OPA API using bash
 data "external" "secrets" {
   program = ["bash", "./get_terrafrom_creds.sh"]
 }
+
+### retrieve necessary credentials and team details to interact with OPA API using powershell
+#data "external" "secrets" {
+#  program = ["powershell", "-ExecutionPolicy", "Bypass", "-File", "./get_terrafrom_creds.ps1"]
+#}
 
 ### establish parameters for connecting to your OPA team
 provider "oktapam" {
