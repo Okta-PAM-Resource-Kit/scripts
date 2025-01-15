@@ -35,12 +35,6 @@ if (-not $team_URL) {
     exit 1
 }
 
-# Check if all commands succeeded
-if (!$apikey -or !$apisecret -or !$team -or !$url) {
-    Write-Output '{"error": "Failed to retrieve secrets"}'
-    exit 1
-}
-
 # Create a JSON object with the secrets
 $secrets = @{
     apikey    = $apikey

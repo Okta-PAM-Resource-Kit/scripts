@@ -10,14 +10,14 @@ terraform {
 }
 
 ### retrieve necessary credentials and team details to interact with OPA API using bash
-data "external" "secrets" {
-  program = ["bash", "./get_terrafrom_creds.sh"]
-}
+#data "external" "secrets" {
+#  program = ["bash", "./get_terrafrom_creds.sh"]
+#}
 
 ### retrieve necessary credentials and team details to interact with OPA API using powershell
-#data "external" "secrets" {
-#  program = ["powershell", "-ExecutionPolicy", "Bypass", "-File", "./get_terrafrom_creds.ps1"]
-#}
+data "external" "secrets" {
+  program = ["powershell", "-ExecutionPolicy", "Bypass", "-File", "./get_terraform_creds.ps1"]
+}
 
 ### establish parameters for connecting to your OPA team
 provider "oktapam" {
@@ -40,7 +40,7 @@ resource "oktapam_kubernetes_cluster" "k8slab-1" {
 resource "oktapam_kubernetes_cluster_connection" "k8slab-1" {
   cluster_id         = oktapam_kubernetes_cluster.k8slab-1.id
 ### update the line below to indicate the URL of the k8s apiserver
-  api_url            = "https://your-k8s-apiserver:6443"
+  api_url            = "https://10.128.0.7:6443"
   public_certificate = file("./ca.crt")
 }
 
@@ -48,7 +48,7 @@ resource "oktapam_kubernetes_cluster_connection" "k8slab-1" {
 ### define OPA group to k8s cluster role binding
 resource "oktapam_kubernetes_cluster_group" "k8slab-1" {
   cluster_selector  = "env=POC"
-  group_name		    = "PAM-K8s-Admins"
+  group_name		    = "PAM-K8s-Admins2"
   claims            = { groups = "system:masters" }
 }
 
