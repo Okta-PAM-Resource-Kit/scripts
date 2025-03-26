@@ -11,7 +11,7 @@ terraform {
 
 ### retrieve necessary credentials and team details to interact with OPA API using bash
 #data "external" "secrets" {
-#  program = ["bash", "./get_terrafrom_creds.sh"]
+#  program = ["bash", "./get_terraform_creds.sh"]
 #}
 
 ### retrieve necessary credentials and team details to interact with OPA API using powershell
