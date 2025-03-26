@@ -504,8 +504,8 @@ function checkNoProxy() {
 	# Define your target domain and the expected public key fingerprints (SHA-256)
 	# Set target website and known fingerprints
 	website="dist.scaleft.com"
-	known_server_cert_sha256_fingerprint="52472EFADBD13DD93CC5F5E57F7F6808D64C5C691F79554BF3FA8252745BA10A"
-	known_intermediate_cert_sha256_fingerprint="BF8A69027BCC8D2D42A6E6D25BDD4873F6A34B8F90EDF07E86C5D6916DA0B933"
+	known_server_cert_sha256_fingerprint="D71C76A863B4EFFCA51C36ACF0CA10378039124D4CBD69495DD1F2BE87FDCB80"
+	known_intermediate_cert_sha256_fingerprint="B0F330A31A0C50987E1C3A7BB02C2DDA682991D3165B517BD44FBA4A6020BD94"
 
 	# Get certificate chain
 	cert_chain=$(openssl s_client -showcerts -connect "$website:443" -servername "$website" < /dev/null 2>/dev/null)
