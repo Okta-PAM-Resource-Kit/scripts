@@ -11,11 +11,10 @@ RoyalTSX plugins for RDP and Terminal are also required.
 
 ## How to Use
 * In RoyalTSX create a Document (*From the menu bar, File -> New Document*)
-* Within the new document, create a new *Dynamic Folder*
+* Within the new document, add a new *Dynamic Folder*
 * Update the *Display Name* 
 * Enable *Automatically reload folder contents* if desired.
-* Click on the new folder, then *Properties*
 * Click *Dynamic Folder Script*
-* Set the interpreter to Bash
+* Set the interpreter to *Bash*
 * Paste the included script into the editor window
 * Click **Apply & Close**
