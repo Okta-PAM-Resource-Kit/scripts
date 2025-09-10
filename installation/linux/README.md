@@ -2,7 +2,7 @@
 
 ## Overview
 
-LinuxAndBsdAsaInstall.sh is intended to function as a universal install script for support Linux and BSD versions of the OPA/ASA Server Tools, OPA/ASA Gateway and RDP session Transcoder, and OPA/ASA Client Tools.  
+LinuxAndBsdOPAInstall.sh is intended to function as a universal install script for support Linux and BSD versions of the OPA/ASA Server Tools, OPA/ASA Gateway and RDP session Transcoder, and OPA/ASA Client Tools.  
 
 **_These scripts are not supported by Okta, and no warranty is expressed or implied.  Please review and understand all scripts before using.  Use at your own risk._**
 
@@ -25,7 +25,7 @@ This script can be run interactively from the command line using arguments, or p
 **_This script requires bash, awk, curl, and openssl to run successfully._**
 
 ```bash
-LinuxAndBsdAsaInstall.sh [-a] [-s] [-S server_enrollment_token] [-g GATEWAY_TOKEN] [-c|-r [prod|test]] [-p] [-h] 
+LinuxAndBsdOPAInstall.sh [-a] [-s] [-S server_enrollment_token] [-g GATEWAY_TOKEN] [-c|-r [prod|test]] [-p] [-h] 
     -s                          Install ASA Server Tools without providing an enrollment token.
     -S server_enrollment_token  Install ASA Server Tools with the provided enrollment token.
     -a                          Set OPA created users to full sudo access by default.
@@ -62,9 +62,9 @@ To automate installation using AWS EC2 User Data, GCP startup-script, or orchest
 ```bash
 #!/usr/bin/env bash
 #Download, make executable, and launch install script with desired options.
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdAsaInstall.sh
-chmod +x LinuxAndBsdAsaInstall.sh
-./LinuxAndBsdAsaInstall.sh -S enrollment_token
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdOPAInstall.sh
+chmod +x LinuxAndBsdOPAInstall.sh
+./LinuxAndBsdOPAInstall.sh -S enrollment_token
 ```
 
 ### Server and Client Agent Installation
@@ -72,9 +72,9 @@ chmod +x LinuxAndBsdAsaInstall.sh
 ```bash
 #!/usr/bin/env bash
 #Download, make executable, and launch install script with desired options.
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdAsaInstall.sh
-chmod +x LinuxAndBsdAsaInstall.sh
-./LinuxAndBsdAsaInstall.sh -S enrollment_token -c
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdOPAInstall.sh
+chmod +x LinuxAndBsdOPAInstall.sh
+./LinuxAndBsdOPAInstall.sh -S enrollment_token -c
 ```
 
 ### Gateway Installation
@@ -82,9 +82,9 @@ chmod +x LinuxAndBsdAsaInstall.sh
 ```bash
 #!/usr/bin/env bash
 #Download, make executable, and launch install script with desired options.
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdAsaInstall.sh
-chmod +x LinuxAndBsdAsaInstall.sh
-./LinuxAndBsdAsaInstall.sh -G setup_token
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdOPAInstall.sh
+chmod +x LinuxAndBsdOPAInstall.sh
+./LinuxAndBsdOPAInstall.sh -G setup_token
 ```
 
 ### Server Agent and Gateway Installation
@@ -92,7 +92,7 @@ chmod +x LinuxAndBsdAsaInstall.sh
 ```bash
 #!/usr/bin/env bash
 #Download, make executable, and launch install script with desired options.
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdAsaInstall.sh
-chmod +x LinuxAndBsdAsaInstall.sh
-./LinuxAndBsdAsaInstall.sh -S enrollment_token -G setup_token
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdOPAInstall.sh
+chmod +x LinuxAndBsdOPAInstall.sh
+./LinuxAndBsdOPAInstall.sh -S enrollment_token -G setup_token
 ```
