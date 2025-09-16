@@ -178,6 +178,43 @@ build_label_pred() {  # AND across labels, or true if none
   echo "(${parts[*]})"
 }
 
+# Include zone: OR across values; a match if EITHER GCP zone_id OR AWS availability_zone equals the value.
+build_inc_zone_pred() {
+  local -a vals=()
+  local v
+  for v in "$@"; do [[ -n "$v" ]] && vals+=("$v"); done
+  if ((${#vals[@]} == 0)); then
+    echo "true"
+  else
+    local -a parts=()
+    for v in "${vals[@]}"; do
+      v="${v//\"/\\\"}"
+      parts+=( "(.instance_details.zone_id==\"$v\" or .instance_details.availability_zone==\"$v\")" )
+    done
+    local IFS=' or '
+    echo "(${parts[*]})"
+  fi
+}
+
+# Exclude zone: AND across values; exclude if NEITHER field equals the value.
+build_exc_zone_pred() {
+  local -a vals=()
+  local v
+  for v in "$@"; do [[ -n "$v" ]] && vals+=("$v"); done
+  if ((${#vals[@]} == 0)); then
+    echo "true"
+  else
+    local -a parts=()
+    for v in "${vals[@]}"; do
+      v="${v//\"/\\\"}"
+      parts+=( "(.instance_details.zone_id!=\"$v\" and .instance_details.availability_zone!=\"$v\")" )
+    done
+    local IFS=' and '
+    echo "(${parts[*]})"
+  fi
+}
+
+
 # ----------------------------
 # Build jq filter program (predicates default to true if arrays empty)
 # ----------------------------
@@ -185,8 +222,8 @@ inc_os_type_pred=$(build_inc_pred "os_type" "${inc_os_type[@]:-}")
 exc_os_type_pred=$(build_exc_pred "os_type" "${exc_os_type[@]:-}")
 inc_os_pred=$(build_inc_pred "os" "${inc_os[@]:-}")
 exc_os_pred=$(build_exc_pred "os" "${exc_os[@]:-}")
-inc_zone_pred=$(build_inc_pred "instance_details.zone_id" "${inc_zone[@]:-}")
-exc_zone_pred=$(build_exc_pred "instance_details.zone_id" "${exc_zone[@]:-}")
+inc_zone_pred=$(build_inc_zone_pred "${inc_zone[@]:-}")
+exc_zone_pred=$(build_exc_zone_pred "${exc_zone[@]:-}")
 inc_ver_pred=$(build_inc_pred "sftd_version" "${inc_ver[@]:-}")
 exc_ver_pred=$(build_exc_pred "sftd_version" "${exc_ver[@]:-}")
 inc_label_pred=$(build_label_pred "inc" "${inc_label[@]:-}")
@@ -209,7 +246,10 @@ jq_program=$(cat <<'JQ'
   | [
       .hostname,
       .access_address,
-      (.instance_details.internal_ip // ""),
+      ( .instance_details.internal_ip // ( (.instance_details.networks // [])
+       | map(.addresses // [])
+       | add
+       | unique | join(",")) // "" ),
       (.instance_details.zone_id // ""),
       (.os // ""),
       (.sftd_version // ""),
