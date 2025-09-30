@@ -37,7 +37,7 @@ asciinema.sh
 ```bash
 curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/session_recordings/asciinema.sh
 chmod +x asciinema.sh
-./asciinema install
+./asciinema.sh install
 ```
 
 ssh_playback.sh
