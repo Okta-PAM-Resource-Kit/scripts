@@ -20,11 +20,8 @@ check_deps() {
     echo "Error: asciinema is not installed or not in PATH." >&2
     exit 1
   fi
-  # Extract version token (handles outputs like: "asciinema 3.0.0" or just "3.0.0")
-  local ver_str major
   ver_str="$(asciinema --version 2>/dev/null | awk '{print $NF}')"
   major="$(printf '%s' "$ver_str" | cut -d. -f1)"
-
   if ! [[ "$major" =~ ^[0-9]+$ ]]; then
     echo "Error: Could not parse asciinema version string: '$ver_str'" >&2
     exit 1
@@ -52,21 +49,15 @@ ACTION="${1:-inactive}"   # default to inactive if no arg provided
 
 show_help() {
   cat <<EOF
-Usage: $0 [inactive|active|help]
+Usage: $0 [inactive|help]
 
 Actions:
   inactive  (default) List sessions already closed for user playback
-  active    List sessions currently open for user playback
   help      Show this help message
 EOF
 }
 
 case "$ACTION" in
-  active)
-    recpath=/tmp
-    cmd="tail -n +1 -f"
-    prefix=""
-    ;;
   inactive)
     recpath=/var/log/sft/sessions
     cmd="cat"
@@ -74,7 +65,7 @@ case "$ACTION" in
     ;;
   -h|--help|help) show_help; exit 0 ;;
   *)
-    echo "Usage: $0 {active|inactive|help}" >&2
+    echo "Usage: $0 {inactive|help}" >&2
     exit 1
     ;;
 esac
