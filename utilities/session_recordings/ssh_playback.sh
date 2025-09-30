@@ -1,7 +1,29 @@
 #!/bin/bash +x
 #
 # OPA session log playback helper.
-case "$1" in
+
+ACTION="${1:-inactive}"   # default to inactive if no arg provided
+
+show_help() {
+  cat <<EOF
+Usage: $0 [inactive|active|help]
+
+Actions:
+  inactive  (default) List sessions already closed for user playback
+
+  active    List sessions currently open for user playback
+
+  help      Show this help message
+
+Examples:
+  $0            # List sessions already closed for user playback
+  $0 inactive   # same as above
+  $0 active.    # List sessions currently open for user playback
+  $0 help       # show this help message
+EOF
+}
+
+case "$ACTION" in
         active)
                 recpath=/tmp
                 cmd="tail -n +1 -f"
@@ -11,6 +33,7 @@ case "$1" in
                 cmd=cat
                 prefix=ssh
                 ;;
+        -h|--help|help) show_help ;;
         *)
                 echo "Usage: $0 {active|inactive}"
                 exit 1
