@@ -3,6 +3,9 @@
 
 set -uo pipefail
 
+# How many bytes to scan for "pty-req" (default: 2048)
+SCAN_BYTES="${SCAN_BYTES:-2048}"
+
 # Save current TTY settings and restore on any exit
 ORIG_STTY="$(stty -g 2>/dev/null || true)"
 cleanup() {
@@ -75,7 +78,7 @@ filesmeta=()
 
 while IFS= read -r file; do
   full_path="${recpath}/${file}"
-  if sudo bash -c "head -c 2048 \"$full_path\" | grep -q 'pty-req'"; then
+  if sudo bash -c "head -c $SCAN_BYTES \"$full_path\" | grep -q 'pty-req'"; then
     size=$(sudo bash -c "stat --format='%s' \"$full_path\"")
     IFS='~' read -r -a fields <<< "$file"
     f1="${fields[1]:-}"
