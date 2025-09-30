@@ -5,18 +5,38 @@
 # - macOS: Rosetta-aware (installs native arm64 on Apple silicon)
 set -euo pipefail
 
-# -------- options / help --------
-ACTION="${1:-install}"
-DEBUG_FLAG="${2:-}"
-if [[ "${DEBUG:-0}" == "1" || "${ACTION}" == "--debug" || "${DEBUG_FLAG:-}" == "--debug" ]]; then
-  export PS4='+ ${BASH_SOURCE}:${LINENO}:${FUNCNAME[0]}: '
+# ------------------ argument parsing ------------------
+DEBUG_MODE=0
+ACTION=""  # first non-flag becomes the action
+
+for arg in "$@"; do
+  case "$arg" in
+    --debug) DEBUG_MODE=1 ;;
+    -h|--help|help) ACTION="help" ;;
+    install|uninstall|reinstall)
+      if [[ -z "${ACTION:-}" || "${ACTION}" == "help" ]]; then ACTION="$arg"; fi
+      ;;
+    *)
+      if [[ "$arg" == -* ]]; then
+        echo "⚠️  Ignoring unknown option: $arg" >&2
+      else
+        if [[ -z "${ACTION:-}" || "${ACTION}" == "help" ]]; then ACTION="$arg"; fi
+      fi
+      ;;
+  esac
+done
+ACTION="${ACTION:-install}"
+
+# ------------------ debug setup ------------------
+if [[ "${DEBUG_MODE}" -eq 1 || "${DEBUG:-0}" == "1" ]]; then
+  export PS4='+ ${BASH_SOURCE:-$0}:${LINENO}:${FUNCNAME[0]:-main}: '
   set -x
-  [[ "$ACTION" == "--debug" ]] && ACTION="${DEBUG_FLAG:-install}"
 fi
 
+# ------------------ helpers ------------------
 show_help() {
   cat <<'EOF'
-Usage: ./asciinema.sh [install|uninstall|help] [--debug]
+Usage: ./asciinema.sh [install|uninstall|reinstall|help] [--debug]
 
 Actions:
   install     Install the latest asciinema (default if no action given).
@@ -26,6 +46,8 @@ Actions:
 
   uninstall   Remove asciinema (binary or pip) and ~/.config/asciinema
 
+  reinstall   Uninstall then install again (handy for upgrades)
+
   help        Show this help message
 
 Options:
@@ -34,11 +56,11 @@ Options:
 Examples:
   ./asciinema.sh                 # install
   ./asciinema.sh uninstall       # uninstall
+  ./asciinema.sh reinstall       # uninstall + install
   DEBUG=1 ./asciinema.sh install # install with tracing
 EOF
 }
 
-# -------- arch / os detection --------
 detect_arch() {
   local os="$1" uname_arch="$2" arch
   case "$uname_arch" in
@@ -46,9 +68,7 @@ detect_arch() {
     arm64|aarch64) arch="aarch64" ;;
     *) echo "Unsupported architecture: $uname_arch" >&2; exit 1 ;;
   esac
-
   if [[ "$os" == "darwin" ]]; then
-    # Prefer native Apple silicon binary even if shell runs under Rosetta
     if command -v sysctl >/dev/null 2>&1; then
       if [[ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" == "1" ]]; then
         if [[ "$uname_arch" == "x86_64" ]]; then
@@ -61,17 +81,15 @@ detect_arch() {
   printf "%s" "$arch"
 }
 
-# Linux: decide gnu vs musl based on glibc
 pick_linux_flavor() {
+  # Decide gnu vs musl based on glibc version
   local want="gnu"
   if command -v ldd >/dev/null 2>&1; then
-    # Example: "ldd (Ubuntu GLIBC 2.35-0ubuntu3.8) 2.35"
     local glibc
     glibc="$(ldd --version 2>&1 | awk 'NR==1{for(i=1;i<=NF;i++) if($i ~ /^([0-9]+\.)+[0-9]+$/){print $i; exit}}')"
     if [[ -n "$glibc" ]]; then
-      # if glibc < 2.39 → choose musl
       if [[ "$(printf '%s\n%s\n' "$glibc" "2.39" | sort -V | head -n1)" != "2.39" ]]; then
-        want="musl"
+        want="musl"   # glibc < 2.39 → pick musl
       fi
     else
       want="musl"
@@ -82,12 +100,10 @@ pick_linux_flavor() {
   printf "%s" "$want"
 }
 
-# -------- helpers --------
 make_tmpdir() {
   local base="${TMPDIR:-/tmp}"
   local d
   d="$(mktemp -d "${base%/}/asciinema.XXXXXX")" || { echo "❌ could not create temp dir"; exit 1; }
-  # ensure writable; if not, retry /var/tmp
   if ! touch "$d/.wtest" 2>/dev/null; then
     d="$(mktemp -d /var/tmp/asciinema.XXXXXX)" || { echo "❌ could not create temp dir (/var/tmp)"; exit 1; }
   fi
@@ -96,62 +112,17 @@ make_tmpdir() {
 }
 
 fetch_latest_version() {
-  # Avoid broken pipe: write JSON to a temp file, then parse
   local tmp json version
   tmp="$(make_tmpdir)"
   trap 'rm -rf "'"$tmp"'"' RETURN
   json="$tmp/latest.json"
   curl -fsSL https://api.github.com/repos/asciinema/asciinema/releases/latest -o "$json"
-  # Parse without jq
   version="$(awk -F'"' '/"tag_name":/ {print $4}' "$json" | head -n1)"
   if [[ -z "${version:-}" ]]; then
     echo "❌ Failed to parse latest version from GitHub API." >&2
     exit 1
   fi
   printf "%s" "$version"
-}
-
-install_asciinema() {
-  local OS UNAME_ARCH ARCH LATEST_VERSION BIN FLAVOR URL TMP_DIR INSTALL_PATH
-  OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-  UNAME_ARCH="$(uname -m)"
-  ARCH="$(detect_arch "$OS" "$UNAME_ARCH")"
-  LATEST_VERSION="$(fetch_latest_version)"
-  echo "➡️ Latest version: $LATEST_VERSION"
-
-  if [[ "$OS" == "linux" ]]; then
-    FLAVOR="$(pick_linux_flavor)" # gnu or musl
-    BIN="asciinema-${ARCH}-unknown-linux-${FLAVOR}"
-  elif [[ "$OS" == "darwin" ]]; then
-    BIN="asciinema-${ARCH}-apple-darwin"
-  else
-    echo "Unsupported OS: $OS" >&2
-    exit 1
-  fi
-
-  URL="https://github.com/asciinema/asciinema/releases/download/${LATEST_VERSION}/${BIN}"
-  TMP_DIR="$(make_tmpdir)"
-  trap 'rm -rf "$TMP_DIR"' EXIT
-
-  echo "➡️ Downloading $URL ..."
-  if curl -fL --retry 3 --retry-delay 1 -o "$TMP_DIR/asciinema" "$URL"; then
-    chmod +x "$TMP_DIR/asciinema"
-    echo "➡️ Installing to /usr/local/bin (requires sudo)..."
-    sudo mv "$TMP_DIR/asciinema" /usr/local/bin/
-    INSTALL_PATH="/usr/local/bin/asciinema"
-
-    # Verify it actually runs; if not, fall back to pip
-    if ! "$INSTALL_PATH" --version >/dev/null 2>&1; then
-      echo "⚠️ Installed binary failed to run (likely libc mismatch). Falling back to pip…"
-      sudo rm -f "$INSTALL_PATH"
-      pip_fallback
-    else
-      echo "🎉 Installed: $("$INSTALL_PATH" --version)"
-    fi
-  else
-    echo "⚠️ Download failed for ${BIN}. Trying pip fallback…"
-    pip_fallback
-  fi
 }
 
 pip_fallback() {
@@ -168,35 +139,16 @@ pip_fallback() {
   fi
 }
 
-uninstall_asciinema() {
-  echo "➡️ Uninstalling asciinema..."
+install_asciinema() {
+  local OS UNAME_ARCH ARCH LATEST_VERSION BIN FLAVOR URL TMP_DIR INSTALL_PATH
+  OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  UNAME_ARCH="$(uname -m)"
+  ARCH="$(detect_arch "$OS" "$UNAME_ARCH")"
+  LATEST_VERSION="$(fetch_latest_version)"
+  echo "➡️ Latest version: $LATEST_VERSION"
 
-  if [[ -x /usr/local/bin/asciinema ]]; then
-    echo "🗑 Removing binary from /usr/local/bin"
-    sudo rm -f /usr/local/bin/asciinema
-  fi
-
-  if command -v python3 >/dev/null 2>&1 && python3 -m pip show asciinema >/dev/null 2>&1; then
-    echo "🗑 Removing pip package"
-    python3 -m pip uninstall -y asciinema
-  fi
-
-  if [[ -d "$HOME/.config/asciinema" ]]; then
-    echo "🗑 Removing config at ~/.config/asciinema"
-    rm -rf "$HOME/.config/asciinema"
-  fi
-
-  echo "🎉 Uninstallation complete."
-}
-
-# -------- main --------
-case "$ACTION" in
-  install)   install_asciinema ;;
-  uninstall) uninstall_asciinema ;;
-  -h|--help|help) show_help ;;
-  *)
-    echo "❌ Unknown action: $ACTION"
-    show_help
-    exit 1
-    ;;
-esac
+  if [[ "$OS" == "linux" ]]; then
+    FLAVOR="$(pick_linux_flavor)" # gnu or musl
+    BIN="asciinema-${ARCH}-unknown-linux-${FLAVOR}"
+  elif [[ "$OS" == "darwin" ]]; then
+    BI
