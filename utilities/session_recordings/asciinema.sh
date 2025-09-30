@@ -29,7 +29,8 @@ install_asciinema() {
   UNAME_ARCH="$(uname -m)"
   ARCH="$(detect_arch "$OS" "$UNAME_ARCH")"
 
-  LATEST_VERSION="$(curl -fsSL https://api.github.com/repos/asciinema/asciinema/releases/latest | awk -F'"' '/"tag_name":/ {print $4; exit}')"
+  LATEST_VERSION="$(curl -fsSL https://api.github.com/repos/asciinema/asciinema/releases/latest | awk -F'"' '/"tag_name":/ {print $4}')"
+
   if [[ -z "${LATEST_VERSION:-}" ]]; then
     echo "❌ Failed to fetch latest asciinema release." >&2
     exit 1
