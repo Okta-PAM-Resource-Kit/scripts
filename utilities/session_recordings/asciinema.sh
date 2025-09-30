@@ -151,4 +151,71 @@ install_asciinema() {
     FLAVOR="$(pick_linux_flavor)" # gnu or musl
     BIN="asciinema-${ARCH}-unknown-linux-${FLAVOR}"
   elif [[ "$OS" == "darwin" ]]; then
-    BI
+    BIN="asciinema-${ARCH}-apple-darwin"
+  else
+    echo "Unsupported OS: $OS" >&2
+    exit 1
+  fi
+
+  URL="https://github.com/asciinema/asciinema/releases/download/${LATEST_VERSION}/${BIN}"
+  TMP_DIR="$(make_tmpdir)"
+  trap 'rm -rf "$TMP_DIR"' EXIT
+
+  echo "➡️ Downloading $URL ..."
+  if curl -fL --retry 3 --retry-delay 1 -o "$TMP_DIR/asciinema" "$URL"; then
+    chmod +x "$TMP_DIR/asciinema"
+    echo "➡️ Installing to /usr/local/bin (requires sudo)..."
+    sudo mv "$TMP_DIR/asciinema" /usr/local/bin/
+    INSTALL_PATH="/usr/local/bin/asciinema"
+
+    if ! "$INSTALL_PATH" --version >/dev/null 2>&1; then
+      echo "⚠️ Installed binary failed to run (likely libc mismatch). Falling back to pip…"
+      sudo rm -f "$INSTALL_PATH"
+      pip_fallback
+    else
+      echo "🎉 Installed: $("$INSTALL_PATH" --version)"
+    fi
+  else
+    echo "⚠️ Download failed for ${BIN}. Trying pip fallback…"
+    pip_fallback
+  fi
+}
+
+uninstall_asciinema() {
+  echo "➡️ Uninstalling asciinema..."
+
+  if [[ -x /usr/local/bin/asciinema ]]; then
+    echo "🗑 Removing binary from /usr/local/bin"
+    sudo rm -f /usr/local/bin/asciinema
+  fi
+
+  if command -v python3 >/dev/null 2>&1 && python3 -m pip show asciinema >/dev/null 2>&1; then
+    echo "🗑 Removing pip package"
+    python3 -m pip uninstall -y asciinema
+  fi
+
+  if [[ -d "$HOME/.config/asciinema" ]]; then
+    echo "🗑 Removing config at ~/.config/asciinema"
+    rm -rf "$HOME/.config/asciinema"
+  fi
+
+  echo "🎉 Uninstallation complete."
+}
+
+reinstall_asciinema() {
+  uninstall_asciinema
+  install_asciinema
+}
+
+# ------------------ main ------------------
+case "$ACTION" in
+  install)   install_asciinema ;;
+  uninstall) uninstall_asciinema ;;
+  reinstall) reinstall_asciinema ;;
+  help|-h|--help) show_help ;;
+  *)
+    echo "❌ Unknown action: $ACTION"
+    show_help
+    exit 1
+    ;;
+esac
