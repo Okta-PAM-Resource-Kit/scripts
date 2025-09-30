@@ -140,7 +140,7 @@ pip_fallback() {
 }
 
 install_asciinema() {
-  local OS UNAME_ARCH ARCH LATEST_VERSION BIN FLAVOR URL TMP_DIR INSTALL_PATH
+  local OS UNAME_ARCH ARCH LATEST_VERSION BIN FLAVOR URL INSTALL_PATH
   OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
   UNAME_ARCH="$(uname -m)"
   ARCH="$(detect_arch "$OS" "$UNAME_ARCH")"
