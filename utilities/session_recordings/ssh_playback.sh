@@ -11,6 +11,43 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# ---- Dependency checks ----
+check_deps() {
+  local missing=()
+
+  # asciinema (>= v2)
+  if ! command -v asciinema >/dev/null 2>&1; then
+    echo "Error: asciinema is not installed or not in PATH." >&2
+    exit 1
+  fi
+  # Extract version token (handles outputs like: "asciinema 3.0.0" or just "3.0.0")
+  local ver_str major
+  ver_str="$(asciinema --version 2>/dev/null | awk '{print $NF}')"
+  major="$(printf '%s' "$ver_str" | cut -d. -f1)"
+
+  if ! [[ "$major" =~ ^[0-9]+$ ]]; then
+    echo "Error: Could not parse asciinema version string: '$ver_str'" >&2
+    exit 1
+  fi
+  if (( major < 2 )); then
+    echo "Error: asciinema v2 or higher required, found $ver_str" >&2
+    exit 1
+  fi
+
+  # sft
+  command -v sft >/dev/null 2>&1 || missing+=("sft")
+
+  # sed
+  command -v sed >/dev/null 2>&1 || missing+=("sed")
+
+  if [ "${#missing[@]}" -gt 0 ]; then
+    echo "Error: Missing required commands: ${missing[*]}" >&2
+    exit 1
+  fi
+}
+check_deps
+# --------------------------
+
 ACTION="${1:-inactive}"   # default to inactive if no arg provided
 
 show_help() {
@@ -21,12 +58,6 @@ Actions:
   inactive  (default) List sessions already closed for user playback
   active    List sessions currently open for user playback
   help      Show this help message
-
-Examples:
-  $0            # List sessions already closed for user playback
-  $0 inactive   # same as above
-  $0 active     # List sessions currently open for user playback
-  $0 help       # show this help message
 EOF
 }
 
@@ -51,10 +82,8 @@ esac
 files=()
 filesmeta=()
 
-# Enumerate candidate .asa files
 while IFS= read -r file; do
   full_path="${recpath}/${file}"
-  # Only include sessions with a pty request
   if sudo bash -c "head -c 2048 \"$full_path\" | grep -q 'pty-req'"; then
     size=$(sudo bash -c "stat --format='%s' \"$full_path\"")
     IFS='~' read -r -a fields <<< "$file"
@@ -75,7 +104,6 @@ echo "Files: ${#files[@]}"
 PS3="Enter a session number (0 to quit): "
 
 select entry in "${filesmeta[@]}"; do
-  # select auto-repeats on empty Enter; handle 0 explicitly
   if [[ -z "${REPLY:-}" ]]; then
     continue
   fi
@@ -89,14 +117,12 @@ select entry in "${filesmeta[@]}"; do
     filename="${picked#* }"
     echo "You selected session ${filename} with a size of ${size}."
 
-    # Stream -> export -> color tweaks -> asciinema play FROM /dev/stdin
     sudo bash -c "$cmd \"$recpath/$filename\"" \
       | sft session-logs export --insecure --format asciinema --stdin \
       | sed --unbuffered 's/}}/}}\n[0.000000001,"o","\\u001b[100m\\r\\nStart\\r\\n\\r\\n"]/g' \
       | sed --unbuffered 's/\[00m\|\[0m\|\[m/\[100m/g' \
       | asciinema play -i 2 -s 2 /dev/stdin
 
-    # Restore terminal in case asciinema/tui altered it
     [ -n "${ORIG_STTY:-}" ] && stty "$ORIG_STTY" 2>/dev/null || true
     tput sgr0 2>/dev/null || true
   else
