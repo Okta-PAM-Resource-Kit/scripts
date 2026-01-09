@@ -2,7 +2,7 @@ function Invoke-SftRunAs {
   [CmdletBinding(PositionalBinding=$true)]
   param(
     [Parameter(Position=0, Mandatory=$true)]
-    [string]$RunAs,          # DOMAIN\user | user@domain | bare user | list-tools | doctor
+    [string]$RunAs,
 
     [Parameter(Position=1)]
     [string]$Tool,
@@ -34,6 +34,29 @@ function Invoke-SftRunAs {
 
   Set-StrictMode -Version Latest
   $ErrorActionPreference = 'Stop'
+
+  if (-not $PSBoundParameters.ContainsKey('RunAs')) {
+    Write-Host @"
+Run Windows administrative tools under a privileged Active Directory account,
+using just-in-time credentials from Okta Privileged Access.
+
+Usage:
+  sft-runas <account> <tool> [tool_args]
+  sft-runas list-tools
+  sft-runas doctor [-ComputerName <target>]
+
+Arguments:
+  <account>      Privileged account (e.g. 'CORP\admin' or 'admin@corp.example.com')
+  <tool>         Tool preset (e.g. 'aduc') or path to an executable.
+  [tool_args]    Arguments to pass to the tool.
+
+Special Commands:
+  list-tools     Show available tool presets.
+  doctor         Run diagnostic checks.
+
+"@
+    return
+  }
 
   if ($UseUpn -and $UseNetBios) { throw "Choose only one: -UseUpn or -UseNetBios." }
   if ($UseUpn)     { $AccountNameFormat = "UPN" }
