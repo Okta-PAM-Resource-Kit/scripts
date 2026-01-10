@@ -132,25 +132,25 @@ sft-runas list-tools
 ### Launch Active Directory Users and Computers
 
 ```powershell
-sft-runas CORP\adm-shad aduc
+sft-runas domain\user aduc
 ```
 
 ### Use UPN format
 
 ```powershell
-sft-runas adm-shad@corp.example.com gpo
+sft-runas user@domain.com gpo
 ```
 
 ### Force NetBIOS formatting
 
 ```powershell
-sft-runas adm-shad aduc -UseNetBios -NetBiosDomain CORP
+sft-runas user aduc -UseNetBios -NetBiosDomain domain
 ```
 
 ### Remote PowerShell (WinRM)
 
 ```powershell
-sft-runas CORP\adm-shad remote-ps SERVER01
+sft-runas domain\user remote-ps SERVER01
 ```
 
 ### Custom executable with arguments
@@ -158,7 +158,7 @@ sft-runas CORP\adm-shad remote-ps SERVER01
 Use `--%` to stop PowerShell argument parsing:
 
 ```powershell
-sft-runas CORP\adm-shad "C:\Windows\System32\cmd.exe" --% /c whoami /all
+sft-runas domain\user "C:\Windows\System32\cmd.exe" --% /c whoami /all
 ```
 
 ---

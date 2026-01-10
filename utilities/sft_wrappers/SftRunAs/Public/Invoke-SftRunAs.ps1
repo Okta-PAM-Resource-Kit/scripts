@@ -215,8 +215,9 @@ Special Commands:
   $id = Parse-Identity -Input $RunAs
 
   if (-not $AdDomainFqdn) {
-    if ($env:USERDNSDOMAIN) { $AdDomainFqdn = $env:USERDNSDOMAIN }
-    else { throw "No -AdDomainFqdn provided and USERDNSDOMAIN is empty. Provide -AdDomainFqdn (e.g. corp.example.com)." }
+    if ($id.UPN) { $AdDomainFqdn = $id.UPN }
+    elseif ($env:USERDNSDOMAIN) { $AdDomainFqdn = $env:USERDNSDOMAIN }
+    else { throw "Could not determine AD Domain FQDN. Provide it via the -AdDomainFqdn parameter, as part of the user identity (user@domain.com), or ensure the USERDNSDOMAIN environment variable is set." }
   }
 
   $logonName = Format-LogonName -id $id
