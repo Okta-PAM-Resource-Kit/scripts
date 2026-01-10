@@ -193,6 +193,9 @@ Special Commands:
 
   $id = Parse-Identity -Input $RunAs
 
+  Write-Host "RunAs parsed into user: '$id.User' and domain: '$id.UPN'" -ForegroundColor Cyan
+
+  $AdDomainFqdn = "
   if (-not $AdDomainFqdn) {
     if ($id.UPN) { $AdDomainFqdn = $id.UPN }
     elseif ($env:USERDNSDOMAIN) { $AdDomainFqdn = $env:USERDNSDOMAIN }
