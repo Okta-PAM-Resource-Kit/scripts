@@ -13,15 +13,6 @@ function Invoke-SftRunAs {
     [string]$Team,
     [string]$AdDomainFqdn,
 
-    [ValidateSet("Auto","NetBIOS","UPN")]
-    [string]$AccountNameFormat = "Auto",
-
-    [switch]$UseUpn,
-    [switch]$UseNetBios,
-
-    [string]$NetBiosDomain,
-    [string]$UpnDomain,
-
     [ValidateSet("Auto","Pwsh","WindowsPowerShell")]
     [string]$Shell = "Auto", # used by remote-ps preset only
 
@@ -58,10 +49,6 @@ Special Commands:
     return
   }
 
-  if ($UseUpn -and $UseNetBios) { throw "Choose only one: -UseUpn or -UseNetBios." }
-  if ($UseUpn)     { $AccountNameFormat = "UPN" }
-  if ($UseNetBios) { $AccountNameFormat = "NetBIOS" }
-
   function Require-Command([string]$Name) {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
       throw "Required command not found in PATH: $Name"
@@ -86,33 +73,18 @@ Special Commands:
   }
 
   function Parse-Identity([string]$Input) {
-    if ($Input -match '^(?<dom>[^\\]+)\\(?<usr>.+)$') {
-      return [pscustomobject]@{ User=$Matches.usr; NetBIOS=$Matches.dom; UPN=$null; Raw=$Input }
-    }
     if ($Input -match '^(?<usr>[^@]+)@(?<dom>.+)$') {
-      return [pscustomobject]@{ User=$Matches.usr; NetBIOS=$null; UPN=$Matches.dom; Raw=$Input }
+      return [pscustomobject]@{ User=$Matches.usr; UPN=$Matches.dom; Raw=$Input }
     }
-    return [pscustomobject]@{ User=$Input; NetBIOS=$null; UPN=$null; Raw=$Input }
+    return [pscustomobject]@{ User=$Input; UPN=$null; Raw=$Input }
   }
 
   function Format-LogonName($id) {
-    switch ($AccountNameFormat) {
-      "Auto" {
-        if ($id.Raw -match '[\\@]') { return $id.Raw }
-        if ($NetBiosDomain) { return "$NetBiosDomain\$($id.User)" }
-        if ($UpnDomain)     { return "$($id.User)@$UpnDomain" }
-        throw "RunAs '$($id.Raw)' has no domain info. Provide -NetBiosDomain or -UpnDomain, or pass DOMAIN\user / user@domain."
-      }
-      "NetBIOS" {
-        $dom = if ($id.NetBIOS) { $id.NetBIOS } else { $NetBiosDomain }
-        if (-not $dom) { throw "NetBIOS domain required (DOMAIN\user or -NetBiosDomain)." }
-        return "$dom\$($id.User)"
-      }
-      "UPN" {
-        $dom = if ($id.UPN) { $id.UPN } else { $UpnDomain }
-        if (-not $dom) { throw "UPN domain required (user@domain or -UpnDomain)." }
-        return "$($id.User)@$dom"
-      }
+    if ($id.UPN) {
+      return $id.Raw
+    }
+    else {
+      throw "RunAs '$($id.Raw)' has no domain info. Please provide the account in user@domain.com format."
     }
   }
 
