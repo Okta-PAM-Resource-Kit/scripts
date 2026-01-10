@@ -1,7 +1,7 @@
 function Invoke-SftRunAs {
   [CmdletBinding(PositionalBinding=$true)]
   param(
-    [Parameter(Position=0, Mandatory=$true)]
+    [Parameter(Position=0)]
     [string]$RunAs,
 
     [Parameter(Position=1)]
@@ -81,7 +81,7 @@ Special Commands:
 
   function Format-LogonName($id) {
     if ($id.UPN) {
-      return $id.Raw
+      return "$($id.User)@$($id.UPN)"
     }
     else {
       throw "RunAs '$($id.Raw)' has no domain info. Please provide the account in user@domain.com format."
@@ -221,7 +221,7 @@ Special Commands:
 
   try {
     $secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
-    $cred   = [pscredential]::new($logonName, $secure)
+    $cred   = [pscredential]::new($id.User, $secure, $AdDomainFqdn)
 
     $p = Start-Process -FilePath $launchFile -ArgumentList $launchArgs -Credential $cred -PassThru
 
