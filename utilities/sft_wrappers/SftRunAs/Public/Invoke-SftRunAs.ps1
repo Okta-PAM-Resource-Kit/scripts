@@ -26,7 +26,7 @@ function Invoke-SftRunAs {
   Set-StrictMode -Version Latest
   $ErrorActionPreference = 'Stop'
 
-  if (-not $PSBoundParameters.ContainsKey('RunAs')) {
+  if ($PSBoundParameters.Count -eq 0) {
     Write-Host @"
 Run Windows administrative tools under a privileged Active Directory account,
 using just-in-time credentials from Okta Privileged Access.
@@ -47,6 +47,11 @@ Special Commands:
 
 "@
     return
+  }
+
+  # After the no-arg check, we can validate that the core arguments were provided.
+  if (-not $PSBoundParameters.ContainsKey('RunAs')) {
+    throw "Missing required argument: <account>. Run 'sft-runas' with no arguments to see usage."
   }
 
   function Require-Command([string]$Name) {
@@ -183,6 +188,8 @@ Special Commands:
 
   # Main execution
   Require-Command "sft"
+  
+  Write-Host "Attempting to run '$Tool' as '$RunAs'..." -ForegroundColor Cyan
 
   $id = Parse-Identity -Input $RunAs
 
@@ -217,11 +224,12 @@ Special Commands:
     if ($ToolArgs) { $launchArgs = $ToolArgs }
   }
 
+
   $plain = Get-OpaAdPasswordPlain -AdDomainFqdn $AdDomainFqdn -AdUsername $id.User -Team $Team
 
   try {
     $secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
-    $cred   = [pscredential]::new($id.User, $secure, $AdDomainFqdn)
+    $cred   = [pscredential]::new($logonName, $secure)
 
     $p = Start-Process -FilePath $launchFile -ArgumentList $launchArgs -Credential $cred -PassThru
 
