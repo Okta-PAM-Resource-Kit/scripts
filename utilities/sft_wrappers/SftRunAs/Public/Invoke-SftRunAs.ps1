@@ -111,32 +111,42 @@ Special Commands:
       CreateNoWindow         = $true
     }
 
-    $p = New-Object System.Diagnostics.Process
-    $p.StartInfo = $psi
-    $p.Start() | Out-Null
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $psi
 
-    $output = $p.StandardOutput.ReadToEnd()
-    $p.WaitForExit(1000) # Wait up to 1 second for exit
+    # Use eventing to read output asynchronously to avoid deadlocks
+    $output = New-Object System.Collections.Generic.List[string]
+    $handler = { $output.Add($EventArgs.Data) }
+    $event = Register-ObjectEvent -InputObject $process -EventName "OutputDataReceived" -Action $handler
 
-    # If process is still running, it's likely waiting for input.
-    if (-not $p.HasExited) {
-      if ($output -match "Select an access method from the above list:") {
-        Write-Host $output -ForegroundColor Yellow
-        $selection = Read-Host "Please enter your selection"
-        $p.StandardInput.WriteLine($selection)
-        $finalOutput = $p.StandardOutput.ReadToEnd() # Read the final output after providing input
-        $output += $finalOutput
+    try {
+      $process.Start() | Out-Null
+      $process.BeginOutputReadLine()
+
+      # Wait for a short period to see if the process exits or prompts for input.
+      if ($process.WaitForExit(1500)) {
+        # Process finished quickly, no interaction needed.
       } else {
-        # The process is hung for a reason we don't handle. Terminate it.
-        $p.Kill()
-        throw "sft process became unresponsive without a recognized prompt. Output: $output"
+        # Process is still running, check if it's waiting for input.
+        $currentOutput = $output -join "`n"
+        if ($currentOutput -match "Select an access method from the above list:") {
+          Write-Host $currentOutput -ForegroundColor Yellow
+          $selection = Read-Host "Please enter your selection"
+          $process.StandardInput.WriteLine($selection)
+        }
       }
+
+      # Wait for the process to fully exit after any potential interaction.
+      $process.WaitForExit()
+      $errorOutput = $process.StandardError.ReadToEnd()
+
+      if ($process.ExitCode -ne 0) { throw "sft failed (ExitCode: $($process.ExitCode)): $errorOutput" }
+
+      return $output
+    } finally {
+      Unregister-Event -SourceIdentifier $event.Name
+      $process.Dispose()
     }
-
-    $errorOutput = $p.StandardError.ReadToEnd()
-    if ($p.ExitCode -ne 0) { throw "sft failed (ExitCode: $($p.ExitCode)): $errorOutput" }
-
-    return ($output -split "`r?`n")
   }
 
   function Get-OpaAdPasswordPlain([string]$AdDomainFqdn, [string]$AdUsername, [string]$Team) {
