@@ -77,11 +77,13 @@ Special Commands:
     throw "Neither pwsh nor powershell.exe was found."
   }
 
-  function Parse-Identity([string]$Input) {
-    if ($Input -match '^(?<usr>[^@]+)@(?<dom>.+)$') {
-      return [pscustomobject]@{ User=$Matches.usr; UPN=$Matches.dom; Raw=$Input }
+  function Parse-Identity([string]$IdentityString) {
+    Write-Host "IdentityString is '$IdentityString'" -ForegroundColor Cyan
+    $Matches = @
+    if ($IdentityString -match '^(?<usr>[^@]+)@(?<dom>.+)$') {
+      return [pscustomobject]@{ User=$Matches.usr; UPN=$Matches.dom; Raw=$IdentityString }
     }
-    return [pscustomobject]@{ User=$Input; UPN=$null; Raw=$Input }
+    return [pscustomobject]@{ User=$IdentityString; UPN=$null; Raw=$IdentityString }
   }
 
   function Format-LogonName($id) {
@@ -191,11 +193,10 @@ Special Commands:
   
   Write-Host "Attempting to run '$Tool' as '$RunAs'..." -ForegroundColor Cyan
 
-  $id = Parse-Identity -Input $RunAs
+  $id = Parse-Identity -IdentityString $RunAs
 
-  Write-Host "RunAs parsed into user: '$id.User' and domain: '$id.UPN'" -ForegroundColor Cyan
+  Write-Host "RunAs parsed into user: '$($id.User)' and domain: '$($id.UPN)'" -ForegroundColor Cyan
 
-  $AdDomainFqdn = "
   if (-not $AdDomainFqdn) {
     if ($id.UPN) { $AdDomainFqdn = $id.UPN }
     elseif ($env:USERDNSDOMAIN) { $AdDomainFqdn = $env:USERDNSDOMAIN }
@@ -228,7 +229,7 @@ Special Commands:
   }
 
 
-  $plain = Get-OpaAdPasswordPlain -AdDomainFqdn $AdDomainFqdn -AdUsername $id.User -Team $Team
+  $plain = Get-OpaAdPasswordPlain -AdDomainFqdn $AdDomainFqdn -AdUsername $($id.User) -Team $Team
 
   try {
     $secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
