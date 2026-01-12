@@ -149,9 +149,9 @@ Special Commands:
     $teamArgs = @()
     if ($Team) { $teamArgs += @("--team",$Team) }
 
-    Invoke-Sft -MyArgs (@("login") + $teamArgs)
+    Invoke-Sft -MyArgs (@("login") + $teamArgs) | Out-Null
     $out = Invoke-Sft -MyArgs (@("ad","reveal","--domain",$AdDomainFqdn,"--ad-account",$AdUsername) + $teamArgs)
-    $pw = ($out | Where-Object { $_ -and $_.Trim().Length -gt 0 -and $_ -notmatch 'PASSWORD\s+ACCOUNT' } | Select-Object -First 1).Split(' ')[0]
+    $pw = ($out | Where-Object { $_ -and $_.Trim().Length -gt 0 -and $_ -notmatch 'PASSWORD\s+ACCOUNT' -and $_ -notmatch 'Session expires' } | Select-Object -First 1).Split(' ')[0]
     Write-Host "pw is '$pw'" -ForegroundColor Cyan
 
     if (-not $pw) { throw "OPA did not return a password for $AdDomainFqdn\$AdUsername." }
