@@ -130,11 +130,8 @@ Special Commands:
       }
 
       if ($promptDetected) {
-        Write-Host $output.Trim() -ForegroundColor Yellow
-        $selection = Read-Host "Please enter your selection"
-        $p.StandardInput.WriteLine($selection)
-        # Read the rest of the output after providing input.
-        $output += $p.StandardOutput.ReadToEnd()
+        $p.Kill()
+        throw "sft requires interactive input to proceed. Please run 'sft ad reveal' manually to resolve the ambiguity. `n`n$($output.Trim())"
       }
 
       $p.WaitForExit()
@@ -154,8 +151,9 @@ Special Commands:
 
     Invoke-Sft -MyArgs (@("login") + $teamArgs)
     $out = Invoke-Sft -MyArgs (@("ad","reveal","--domain",$AdDomainFqdn,"--ad-account",$AdUsername) + $teamArgs)
-    Write-Host "sft output was '$out'" -ForegroundColor Cyan
     $pw = ($out | Where-Object { $_ -and $_.Trim().Length -gt 0 -and $_ -notmatch 'PASSWORD\s+ACCOUNT' } | Select-Object -First 1).Split(' ')[0]
+    Write-Host "pw is '$pw'" -ForegroundColor Cyan
+
     if (-not $pw) { throw "OPA did not return a password for $AdDomainFqdn\$AdUsername." }
     return $pw
   }
@@ -261,7 +259,7 @@ Special Commands:
 
 
   $plain = Get-OpaAdPasswordPlain -AdDomainFqdn $AdDomainFqdn -AdUsername $($id.User) -Team $Team
-
+  Write-Host "Pwd is '$plain'" -ForegroundColor Cyan
   try {
     $secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
     $cred   = [pscredential]::new($logonName, $secure)
