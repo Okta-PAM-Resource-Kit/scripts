@@ -259,7 +259,7 @@ Special Commands:
 
 
   $plain = Get-OpaAdPasswordPlain -AdDomainFqdn $AdDomainFqdn -AdUsername $($id.User) -Team $Team
-  Write-Host "Pwd is '$plain'" -ForegroundColor Cyan
+  Write-Host "Plain is '$plain'" -ForegroundColor Cyan
   try {
     $secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
     $cred   = [pscredential]::new($logonName, $secure)
