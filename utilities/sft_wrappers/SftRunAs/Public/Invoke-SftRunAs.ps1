@@ -79,7 +79,6 @@ Special Commands:
 
   function Parse-Identity([string]$IdentityString) {
     Write-Host "IdentityString is '$IdentityString'" -ForegroundColor Cyan
-    $Matches = @
     if ($IdentityString -match '^(?<usr>[^@]+)@(?<dom>.+)$') {
       return [pscustomobject]@{ User=$Matches.usr; UPN=$Matches.dom; Raw=$IdentityString }
     }
@@ -95,48 +94,72 @@ Special Commands:
     }
   }
 
-  function Invoke-Sft([string[]]$Args) {
-    $psi = [System.Diagnostics.ProcessStartInfo]::new()
-    $psi.FileName = "sft"
-    $psi.Arguments = ($Args | ForEach-Object {
-      if ($_ -match '\s') { '"' + ($_ -replace '"','\"') + '"' } else { $_ }
-    }) -join ' '
-    $psi.RedirectStandardOutput = $true
-    $psi.RedirectStandardError  = $true
-    $psi.UseShellExecute = $false
-    $psi.CreateNoWindow  = $true
+  function Invoke-Sft([string[]]$MyArgs) {
+    # Use ProcessStartInfo to capture stdout/stderr in memory without writing to disk.
+    # This is critical for security as sft can output plaintext passwords.
+    $psi = [System.Diagnostics.ProcessStartInfo]@{
+      FileName               = "sft"
+      # Manually quote arguments to support very old PowerShell versions (e.g. v2)
+      # where modern argument escaping methods don't exist.
+      Arguments              = ($MyArgs | ForEach-Object {
+        if ($_ -match '\s') { '"' + $_ + '"' } else { $_ }
+      }) -join ' '
+      RedirectStandardInput  = $true
+      RedirectStandardOutput = $true
+      RedirectStandardError  = $true
+      UseShellExecute        = $false
+      CreateNoWindow         = $true
+    }
 
-    $p = [System.Diagnostics.Process]::Start($psi)
-    $out = $p.StandardOutput.ReadToEnd()
-    $err = $p.StandardError.ReadToEnd()
-    $p.WaitForExit()
+    $p = New-Object System.Diagnostics.Process
+    $p.StartInfo = $psi
+    $p.Start() | Out-Null
 
-    if ($p.ExitCode -ne 0) { throw "sft failed ($($p.ExitCode)): $err" }
-    return ($out -split "`r?`n")
+    $output = $p.StandardOutput.ReadToEnd()
+    $p.WaitForExit(1000) # Wait up to 1 second for exit
+
+    # If process is still running, it's likely waiting for input.
+    if (-not $p.HasExited) {
+      if ($output -match "Select an access method from the above list:") {
+        Write-Host $output -ForegroundColor Yellow
+        $selection = Read-Host "Please enter your selection"
+        $p.StandardInput.WriteLine($selection)
+        $output = $p.StandardOutput.ReadToEnd() # Read the final output after providing input
+      } else {
+        # The process is hung for a reason we don't handle. Terminate it.
+        $p.Kill()
+        throw "sft process became unresponsive without a recognized prompt. Output: $output"
+      }
+    }
+
+    $errorOutput = $p.StandardError.ReadToEnd()
+    if ($p.ExitCode -ne 0) { throw "sft failed (ExitCode: $($p.ExitCode)): $errorOutput" }
+
+    return ($output -split "`r?`n")
   }
 
   function Get-OpaAdPasswordPlain([string]$AdDomainFqdn, [string]$AdUsername, [string]$Team) {
     $teamArgs = @()
     if ($Team) { $teamArgs += @("--team",$Team) }
 
-    Invoke-Sft (@("login") + $teamArgs) | Out-Null
-    $out = Invoke-Sft (@("ad","reveal","--domain",$AdDomainFqdn,"--ad-account",$AdUsername) + $teamArgs)
+    Invoke-Sft -MyArgs (@("login") + $teamArgs)
+    $out = Invoke-Sft -MyArgs (@("ad","reveal","--domain",$AdDomainFqdn,"--ad-account",$AdUsername) + $teamArgs)
 
-    $pw = ($out | Where-Object { $_ -and $_.Trim().Length -gt 0 } | Select-Object -First 1).Trim()
+    $pw = ($out | Where-Object { $_ -and $_.Trim().Length -gt 0 -and $_ -notmatch 'PASSWORD\s+ACCOUNT' } | Select-Object -First 1).Split(' ')[0]
     if (-not $pw) { throw "OPA did not return a password for $AdDomainFqdn\$AdUsername." }
     return $pw
   }
 
   function Test-TcpPort {
     param([string]$Host, [int]$Port, [int]$TimeoutMs = 1500)
-    try {
-      $client = New-Object System.Net.Sockets.TcpClient
-      $iar = $client.BeginConnect($Host, $Port, $null, $null)
-      if (-not $iar.AsyncWaitHandle.WaitOne($TimeoutMs, $false)) { $client.Close(); return $false }
-      $client.EndConnect($iar) | Out-Null
-      $client.Close()
-      return $true
-    } catch { return $false }
+    try { $client = New-Object System.Net.Sockets.TcpClient; $client.Connect($Host, $Port); $client.Close(); return $true } catch { return $false }
+  }
+
+  function Parse-Identity([string]$IdentityString) {
+    if ($IdentityString -match '^(?<usr>[^@]+)@(?<dom>.+)$') {
+      return [pscustomobject]@{ User=$Matches.usr; UPN=$Matches.dom; Raw=$IdentityString }
+    }
+    return [pscustomobject]@{ User=$IdentityString; UPN=$null; Raw=$IdentityString }
   }
 
   $mmc = Join-Path $env:SystemRoot "System32\mmc.exe"
@@ -194,8 +217,6 @@ Special Commands:
   Write-Host "Attempting to run '$Tool' as '$RunAs'..." -ForegroundColor Cyan
 
   $id = Parse-Identity -IdentityString $RunAs
-
-  Write-Host "RunAs parsed into user: '$($id.User)' and domain: '$($id.UPN)'" -ForegroundColor Cyan
 
   if (-not $AdDomainFqdn) {
     if ($id.UPN) { $AdDomainFqdn = $id.UPN }
