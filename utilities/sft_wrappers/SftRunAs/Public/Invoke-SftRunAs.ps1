@@ -111,41 +111,40 @@ Special Commands:
       CreateNoWindow         = $true
     }
 
-    $process = New-Object System.Diagnostics.Process
-    $process.StartInfo = $psi
-
-    # Use eventing to read output asynchronously to avoid deadlocks
-    $output = New-Object System.Collections.Generic.List[string]
-    $handler = { $output.Add($EventArgs.Data) }
-    $event = Register-ObjectEvent -InputObject $process -EventName "OutputDataReceived" -Action $handler
+    $p = New-Object System.Diagnostics.Process
+    $p.StartInfo = $psi
 
     try {
-      $process.Start() | Out-Null
-      $process.BeginOutputReadLine()
+      $p.Start() | Out-Null
+      $output = ""
+      $promptDetected = $false
 
-      # Wait for a short period to see if the process exits or prompts for input.
-      if ($process.WaitForExit(1500)) {
-        # Process finished quickly, no interaction needed.
-      } else {
-        # Process is still running, check if it's waiting for input.
-        $currentOutput = $output -join "`n"
-        if ($currentOutput -match "Select an access method from the above list:") {
-          Write-Host $currentOutput -ForegroundColor Yellow
-          $selection = Read-Host "Please enter your selection"
-          $process.StandardInput.WriteLine($selection)
+      # Read output until the process exits or we detect a prompt.
+      while (-not $p.StandardOutput.EndOfStream) {
+        $line = $p.StandardOutput.ReadLine()
+        $output += "$line`n"
+        if ($line -match "Select an access method from the above list:") {
+          $promptDetected = $true
+          break
         }
       }
 
-      # Wait for the process to fully exit after any potential interaction.
-      $process.WaitForExit()
-      $errorOutput = $process.StandardError.ReadToEnd()
+      if ($promptDetected) {
+        Write-Host $output.Trim() -ForegroundColor Yellow
+        $selection = Read-Host "Please enter your selection"
+        $p.StandardInput.WriteLine($selection)
+        # Read the rest of the output after providing input.
+        $output += $p.StandardOutput.ReadToEnd()
+      }
 
-      if ($process.ExitCode -ne 0) { throw "sft failed (ExitCode: $($process.ExitCode)): $errorOutput" }
+      $p.WaitForExit()
+      $errorOutput = $p.StandardError.ReadToEnd()
 
-      return $output
+      if ($p.ExitCode -ne 0) { throw "sft failed (ExitCode: $($p.ExitCode)): $errorOutput" }
+
+      return ($output -split "`r?`n")
     } finally {
-      Unregister-Event -SourceIdentifier $event.Name
-      $process.Dispose()
+      $p.Dispose()
     }
   }
 
