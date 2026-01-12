@@ -124,7 +124,8 @@ Special Commands:
         Write-Host $output -ForegroundColor Yellow
         $selection = Read-Host "Please enter your selection"
         $p.StandardInput.WriteLine($selection)
-        $output = $p.StandardOutput.ReadToEnd() # Read the final output after providing input
+        $finalOutput = $p.StandardOutput.ReadToEnd() # Read the final output after providing input
+        $output += $finalOutput
       } else {
         # The process is hung for a reason we don't handle. Terminate it.
         $p.Kill()
@@ -144,7 +145,7 @@ Special Commands:
 
     Invoke-Sft -MyArgs (@("login") + $teamArgs)
     $out = Invoke-Sft -MyArgs (@("ad","reveal","--domain",$AdDomainFqdn,"--ad-account",$AdUsername) + $teamArgs)
-
+    Write-Host "sft output was '$out'" -ForegroundColor Cyan
     $pw = ($out | Where-Object { $_ -and $_.Trim().Length -gt 0 -and $_ -notmatch 'PASSWORD\s+ACCOUNT' } | Select-Object -First 1).Split(' ')[0]
     if (-not $pw) { throw "OPA did not return a password for $AdDomainFqdn\$AdUsername." }
     return $pw
