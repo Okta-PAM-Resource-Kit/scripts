@@ -116,47 +116,43 @@ Special Commands:
     $p.StartInfo = $psi
 
     try {
-        $p.Start() | Out-Null
-        $output = ""
-        
-        # Loop as long as the process is running and there is output to read.
-        while (-not $p.HasExited -or $p.StandardOutput.Peek() -ne -1) {
-            if ($p.StandardOutput.Peek() -ne -1) {
-                $output += $p.StandardOutput.ReadToEnd()
-            }
+      $p.Start() | Out-Null
 
-            # If we find the prompt, we know sft is waiting for input it can't receive.
-            if ($output -match "Select an access method from the above list:") {
-                $p.Kill()
-                throw "sft requires interactive input to proceed. Please run 'sft ad reveal' manually to resolve the ambiguity. `n`n$($output.Trim())"
-            }
+      # Wait for the process to exit, with a 10-second timeout.
+      if (-not ($p.WaitForExit(10000))) {
+        # If the process is still running after the timeout, assume it's waiting for input.
+        $p.Kill()
+        $partialOutput = $p.StandardOutput.ReadToEnd()
+        throw "sft command timed out after 10 seconds, likely waiting for interactive input. Please run 'sft ad reveal' manually to resolve the ambiguity.`n`nPartial output:`n$partialOutput"
+      }
 
-            # Brief sleep to prevent a tight loop if the process is running but not producing output.
-            if (-not $p.HasExited) {
-                Start-Sleep -Milliseconds 100
-            }
-        }
+      # Process exited within the timeout.
+      $output = $p.StandardOutput.ReadToEnd()
+      $errorOutput = $p.StandardError.ReadToEnd()
 
-        $p.WaitForExit()
-        $errorOutput = $p.StandardError.ReadToEnd()
-
-        if ($p.ExitCode -ne 0) { throw "sft failed (ExitCode: $($p.ExitCode)): $errorOutput" }
-        return ($output -split "`r?`n")
+      if ($p.ExitCode -ne 0) { throw "sft failed (ExitCode: $($p.ExitCode)): $errorOutput" }
+      return ($output -split "`r?`n")
     } finally {
       $p.Dispose()
     }
   }
 
-  function Get-OpaAdPasswordPlain([string]$AdDomainFqdn, [string]$AdUsername, [string]$Team) {
+  function Get-OpaAdPasswordSecure([string]$AdDomainFqdn, [string]$AdUsername, [string]$Team) {
     $teamArgs = @()
     if ($Team) { $teamArgs += @("--team",$Team) }
 
-    Invoke-Sft -MyArgs (@("login") + $teamArgs) | Out-Null
-    $out = Invoke-Sft -MyArgs (@("ad","reveal","--domain",$AdDomainFqdn,"--ad-account",$AdUsername) + $teamArgs)
-    $pw = ($out | Where-Object { $_ -and $_.Trim().Length -gt 0 -and $_ -notmatch 'PASSWORD\s+ACCOUNT' -and $_ -notmatch 'Session expires' } | Select-Object -First 1).Split(' ')[0]
+    try {
+      Invoke-Sft -MyArgs (@("login") + $teamArgs) | Out-Null
+      $out = Invoke-Sft -MyArgs (@("ad","reveal","--domain",$AdDomainFqdn,"--ad-account",$AdUsername) + $teamArgs)
+      $pw = ($out | Where-Object { $_ -and $_.Trim().Length -gt 0 -and $_ -notmatch 'PASSWORD\s+ACCOUNT' -and $_ -notmatch 'Session expires' } | Select-Object -First 1).Split(' ')[0]
 
-    if (-not $pw) { throw "OPA did not return a password for $AdDomainFqdn\$AdUsername." }
-    return $pw
+      if (-not $pw) { throw "OPA did not return a password for $AdDomainFqdn\$AdUsername." }
+
+      return (ConvertTo-SecureString -String $pw -AsPlainText -Force)
+    } finally {
+      # Ensure plaintext variables are cleared immediately after use.
+      $pw = $null
+    }
   }
 
   function Test-TcpPort {
@@ -259,9 +255,8 @@ Special Commands:
   }
 
 
-  $plain = Get-OpaAdPasswordPlain -AdDomainFqdn $AdDomainFqdn -AdUsername $($id.User) -Team $Team
   try {
-    $secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
+    $secure = Get-OpaAdPasswordSecure -AdDomainFqdn $AdDomainFqdn -AdUsername $($id.User) -Team $Team
     $cred   = [pscredential]::new($logonName, $secure)
 
     # Start-Process cannot use -Credential and -Verb RunAs together.
@@ -276,7 +271,6 @@ Special Commands:
     if ($PassThru) { $p }
   }
   finally {
-    $plain  = $null
     $secure = $null
     $cred   = $null
     [System.GC]::Collect()
