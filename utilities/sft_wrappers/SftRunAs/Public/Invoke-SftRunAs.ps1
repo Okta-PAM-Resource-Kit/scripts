@@ -285,4 +285,5 @@ Special Commands:
 }
 
 Set-Alias -Name sft-runas -Value Invoke-SftRunAs
-Export-ModuleMember -Function Invoke-SftRunAs -Alias sft-runas
+Set-Alias -Name sftrunas -Value Invoke-SftRunAs
+Export-ModuleMember -Function Invoke-SftRunAs -Alias sft-runas, sftrunas
