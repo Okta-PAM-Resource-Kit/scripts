@@ -78,7 +78,6 @@ Special Commands:
   }
 
   function Parse-Identity([string]$IdentityString) {
-    Write-Host "IdentityString is '$IdentityString'" -ForegroundColor Cyan
     if ($IdentityString -match '^(?<usr>[^@]+)@(?<dom>.+)$') {
       return [pscustomobject]@{ User=$Matches.usr; UPN=$Matches.dom; Raw=$IdentityString }
     }
@@ -87,7 +86,9 @@ Special Commands:
 
   function Format-LogonName($id) {
     if ($id.UPN) {
-      return "$($id.User)@$($id.UPN)"
+      # Convert FQDN from UPN to a NetBIOS domain name.
+      $netbiosDomain = ($id.UPN.Split('.'))[0].ToUpper()
+      return "$netbiosDomain\$($id.User)"
     }
     else {
       throw "RunAs '$($id.Raw)' has no domain info. Please provide the account in user@domain.com format."
@@ -115,31 +116,32 @@ Special Commands:
     $p.StartInfo = $psi
 
     try {
-      $p.Start() | Out-Null
-      $output = ""
-      $promptDetected = $false
+        $p.Start() | Out-Null
+        $output = ""
+        
+        # Loop as long as the process is running and there is output to read.
+        while (-not $p.HasExited -or $p.StandardOutput.Peek() -ne -1) {
+            if ($p.StandardOutput.Peek() -ne -1) {
+                $output += $p.StandardOutput.ReadToEnd()
+            }
 
-      # Read output until the process exits or we detect a prompt.
-      while (-not $p.StandardOutput.EndOfStream) {
-        $line = $p.StandardOutput.ReadLine()
-        $output += "$line`n"
-        if ($line -match "Select an access method from the above list:") {
-          $promptDetected = $true
-          break
+            # If we find the prompt, we know sft is waiting for input it can't receive.
+            if ($output -match "Select an access method from the above list:") {
+                $p.Kill()
+                throw "sft requires interactive input to proceed. Please run 'sft ad reveal' manually to resolve the ambiguity. `n`n$($output.Trim())"
+            }
+
+            # Brief sleep to prevent a tight loop if the process is running but not producing output.
+            if (-not $p.HasExited) {
+                Start-Sleep -Milliseconds 100
+            }
         }
-      }
 
-      if ($promptDetected) {
-        $p.Kill()
-        throw "sft requires interactive input to proceed. Please run 'sft ad reveal' manually to resolve the ambiguity. `n`n$($output.Trim())"
-      }
+        $p.WaitForExit()
+        $errorOutput = $p.StandardError.ReadToEnd()
 
-      $p.WaitForExit()
-      $errorOutput = $p.StandardError.ReadToEnd()
-
-      if ($p.ExitCode -ne 0) { throw "sft failed (ExitCode: $($p.ExitCode)): $errorOutput" }
-
-      return ($output -split "`r?`n")
+        if ($p.ExitCode -ne 0) { throw "sft failed (ExitCode: $($p.ExitCode)): $errorOutput" }
+        return ($output -split "`r?`n")
     } finally {
       $p.Dispose()
     }
@@ -152,7 +154,6 @@ Special Commands:
     Invoke-Sft -MyArgs (@("login") + $teamArgs) | Out-Null
     $out = Invoke-Sft -MyArgs (@("ad","reveal","--domain",$AdDomainFqdn,"--ad-account",$AdUsername) + $teamArgs)
     $pw = ($out | Where-Object { $_ -and $_.Trim().Length -gt 0 -and $_ -notmatch 'PASSWORD\s+ACCOUNT' -and $_ -notmatch 'Session expires' } | Select-Object -First 1).Split(' ')[0]
-    Write-Host "pw is '$pw'" -ForegroundColor Cyan
 
     if (-not $pw) { throw "OPA did not return a password for $AdDomainFqdn\$AdUsername." }
     return $pw
@@ -259,12 +260,17 @@ Special Commands:
 
 
   $plain = Get-OpaAdPasswordPlain -AdDomainFqdn $AdDomainFqdn -AdUsername $($id.User) -Team $Team
-  Write-Host "Plain is '$plain'" -ForegroundColor Cyan
   try {
     $secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
     $cred   = [pscredential]::new($logonName, $secure)
 
-    $p = Start-Process -FilePath $launchFile -ArgumentList $launchArgs -Credential $cred -PassThru
+    # Start-Process cannot use -Credential and -Verb RunAs together.
+    # The workaround is to start a new PowerShell process with the credentials,
+    # and from within that process, launch the target tool with elevation.
+    $encodedArgs = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($launchArgs))
+    $command = "Start-Process -FilePath '$launchFile' -ArgumentList (([System.Text.Encoding]::Unicode.GetString([System.Convert]::FromBase64String('$encodedArgs'))) | ConvertFrom-Csv -Header 'Arg' | Select-Object -ExpandProperty 'Arg') -Verb RunAs"
+    
+    $p = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-Command", $command -Credential $cred -WindowStyle Hidden -PassThru
 
     if ($Wait) { $p.WaitForExit() | Out-Null }
     if ($PassThru) { $p }
