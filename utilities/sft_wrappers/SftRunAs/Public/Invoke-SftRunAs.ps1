@@ -123,7 +123,9 @@ Special Commands:
         # If the process is still running after the timeout, assume it's waiting for input.
         $p.Kill()
         $partialOutput = $p.StandardOutput.ReadToEnd()
-        throw "sft command timed out after 10 seconds, likely waiting for interactive input. Please run 'sft ad reveal' manually to resolve the ambiguity.`n`nPartial output:`n$partialOutput"
+        $errorMessage = "sft command timed out after 10 seconds, likely waiting for interactive input. Please run 'sft $MyArgs' manually to resolve the ambiguity."
+        Write-Host $errorMessage -ForegroundColor Yellow
+        exit 1
       }
 
       # Process exited within the timeout.
