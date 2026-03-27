@@ -13,9 +13,6 @@ function Invoke-SftRunAs {
     [string]$Team,
     [string]$AdDomainFqdn,
 
-    [ValidateSet("Auto","Pwsh","WindowsPowerShell")]
-    [string]$Shell = "Auto", # used by remote-ps preset only
-
     [string]$ComputerName,   # doctor only
     [switch]$VerboseDoctor,
 
@@ -34,6 +31,7 @@ using just-in-time credentials from Okta Privileged Access.
 Usage:
   sft-runas <account> <tool> [tool_args]
   sft-runas list-tools
+  sft-runas create-shortcuts <account>
   sft-runas doctor [-ComputerName <target>]
 
 Arguments:
@@ -43,6 +41,7 @@ Arguments:
 
 Special Commands:
   list-tools     Show available tool presets.
+  create-shortcuts Create desktop shortcuts for all tool presets.
   doctor         Run diagnostic checks.
 
 "@
@@ -58,23 +57,6 @@ Special Commands:
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
       throw "Required command not found in PATH: $Name"
     }
-  }
-
-  function Get-PowerShellEngines {
-    [pscustomobject]@{
-      Pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue)?.Source
-      WindowsPowerShell = (Get-Command powershell -ErrorAction SilentlyContinue)?.Source
-    }
-  }
-
-  function Select-PowerShellEngine {
-    param([ValidateSet("Auto","Pwsh","WindowsPowerShell")] [string]$Mode = "Auto")
-    $e = Get-PowerShellEngines
-    if ($Mode -eq "Pwsh") { if (-not $e.Pwsh) { throw "pwsh not found." }; return $e.Pwsh }
-    if ($Mode -eq "WindowsPowerShell") { if (-not $e.WindowsPowerShell) { throw "powershell.exe not found." }; return $e.WindowsPowerShell }
-    if ($e.Pwsh) { return $e.Pwsh }
-    if ($e.WindowsPowerShell) { return $e.WindowsPowerShell }
-    throw "Neither pwsh nor powershell.exe was found."
   }
 
   function Parse-Identity([string]$IdentityString) {
@@ -189,11 +171,47 @@ Special Commands:
     wf       = @{ File=$mmc; Args=@("wf.msc") }
     regedit  = @{ File="regedit.exe"; Args=@() }
     control  = @{ File="control.exe"; Args=@() }
+    pwsh     = @{ File="pwsh.exe"; Args=@("-NoExit") }
+    powershell = @{ File="powershell.exe"; Args=@("-NoExit") }
   }
 
   # Commands that don't need credentials
   if ($RunAs.ToLowerInvariant() -eq "list-tools") {
     $Presets.Keys | Sort-Object | ForEach-Object { $_ }
+    return
+  }
+
+  if ($RunAs.ToLowerInvariant() -eq "create-shortcuts") {
+    if (-not $Tool) {
+      throw "The 'create-shortcuts' command requires an account argument. e.g. 'sft-runas create-shortcuts admin@corp.example.com'"
+    }
+    $account = $Tool
+    $desktopPath = [System.Environment]::GetFolderPath('Desktop')
+    $scriptPath = $MyInvocation.MyCommand.Path
+    $wshShell = New-Object -ComObject WScript.Shell
+
+    Write-Host "Creating shortcuts on your desktop for account '$account'..." -ForegroundColor Cyan
+
+    foreach ($preset in $Presets.GetEnumerator() | Sort-Object Name) {
+      $toolName = $preset.Name
+      $toolInfo = $preset.Value
+      $shortcutName = "SftRunAs - $toolName"
+      $shortcutPath = Join-Path $desktopPath "$shortcutName.lnk"
+
+      $psExe = Get-Command pwsh
+      $shortcut = $wshShell.CreateShortcut($shortcutPath)
+      $shortcut.TargetPath = $psExe.Source
+      $shortcut.Arguments = "-NoProfile -File `"$scriptPath`" -RunAs '$account' -Tool '$toolName'"
+      $shortcut.Description = "Run $toolName as $account via Okta Privileged Access"
+      
+      if ($toolInfo.File -eq $mmc) {
+        $shortcut.IconLocation = $toolInfo.Args[0] # .msc file
+      } else {
+        $shortcut.IconLocation = $toolInfo.File # .exe file
+      }
+      $shortcut.Save()
+      Write-Host "Created shortcut: $shortcutName"
+    }
     return
   }
 
@@ -242,7 +260,7 @@ Special Commands:
   if ($toolKey.ToLowerInvariant() -eq "remote-ps") {
     if (-not $ToolArgs -or $ToolArgs.Count -lt 1) { throw "remote-ps requires a target computer name." }
     $target = $ToolArgs[0]
-    $shellExe = Select-PowerShellEngine -Mode $Shell
+    $shellExe = (Get-Command pwsh).Source
     $launchFile = $shellExe
     $launchArgs = @("-NoExit","-Command","Enter-PSSession -ComputerName `"$target`"")
   }
@@ -267,7 +285,7 @@ Special Commands:
     $encodedArgs = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($launchArgs))
     $command = "Start-Process -FilePath '$launchFile' -ArgumentList (([System.Text.Encoding]::Unicode.GetString([System.Convert]::FromBase64String('$encodedArgs'))) | ConvertFrom-Csv -Header 'Arg' | Select-Object -ExpandProperty 'Arg') -Verb RunAs"
     
-    $p = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-Command", $command -Credential $cred -WindowStyle Hidden -PassThru
+    $p = Start-Process -FilePath "pwsh.exe" -ArgumentList "-NoProfile", "-Command", $command -Credential $cred -WindowStyle Hidden -PassThru
 
     if ($Wait) { $p.WaitForExit() | Out-Null }
     if ($PassThru) { $p }
