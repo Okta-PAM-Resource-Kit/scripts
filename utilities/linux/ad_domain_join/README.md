@@ -6,6 +6,8 @@ Automated script to join Linux systems to an Active Directory domain with proper
 
 The `join-ad.sh` script automates the process of joining Linux systems to an Active Directory domain. It handles package installation, DNS verification, domain discovery, SSSD configuration, and SSH setup across multiple Linux distributions.
 
+**_These scripts are not supported by Okta, and no warranty is expressed or implied.  Please review and understand all scripts before using.  Use at your own risk._**
+
 ## Supported Distributions
 
 ### Debian-based
@@ -30,9 +32,11 @@ The `join-ad.sh` script automates the process of joining Linux systems to an Act
 4. **Time synchronization** - System time must be synchronized (Kerberos requirement)
 5. **AD account credentials** - Valid domain administrator or account with domain join privileges
 
-## Usage
+## Download and Usage
 
 ```bash
+curl -O "https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/refs/heads/main/utilities/linux/ad_domain_join/join-ad.sh"
+chmod +x join-ad.sh
 ./join-ad.sh <domain_name> <ad_account_name>
 ```
 
