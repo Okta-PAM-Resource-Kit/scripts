@@ -2,7 +2,7 @@
 
 # Set target website and known fingerprints
 website="dist.scaleft.com"
-known_server_cert_sha256_fingerprint="D71C76A863B4EFFCA51C36ACF0CA10378039124D4CBD69495DD1F2BE87FDCB80"
+known_server_cert_sha256_fingerprint="36A5672BA44AF889214EDA999B5556C036D1293079EFFEFC37D2A91033619434"
 known_intermediate_cert_sha256_fingerprint="B0F330A31A0C50987E1C3A7BB02C2DDA682991D3165B517BD44FBA4A6020BD94"
 
 # Get certificate chain

@@ -4,24 +4,24 @@
 # Run with script with -h option for command line options
 # This script is provided as-is, with no support or warranty expressed or implied, use at your own risk!
 
-# To install the ASA server agent, set the following value to true:
+# To install the OPA server agent, set the following value to true:
 INSTALL_SERVER_TOOLS=false
 
-# Except when using an AWS or GCP account/project linked with an ASA project, 
+# Except when using an AWS or GCP account/project linked with an OPA project, 
 # an enrollment token for the server agent is required.
 # If using an enrollment token, place the token in between the quotes in the  
 # following line:
 SERVER_ENROLLMENT_TOKEN=""
 
-# To leverage ASA for machine to machine authentication, the ASA client tools are required.
-# To install the ASA client tools, set the following value to true:
+# To leverage OPA for machine to machine authentication, the OPA client tools are required.
+# To install the OPA client tools, set the following value to true:
 INSTALL_CLIENT_TOOLS=false
-# ASA Client tools will automatically be installed with the ASA Gateway service
+# OPA Client tools will automatically be installed with the OPA Gateway service
 # for use in decoding SSH and RDP session recordings.
 
-# To install the ASA Gateway service, set the following value to true:
+# To install the OPA Gateway service, set the following value to true:
 INSTALL_GATEWAY=false
-# When installing ASA Gateway service, place the gateway setup token between the quotes
+# When installing OPA Gateway service, place the gateway setup token between the quotes
 # in the following line:
 GATEWAY_TOKEN=""
 
@@ -34,21 +34,33 @@ REPOSITORY="prod"
 # This script uses awk to extract certificate change information necessary to validate there is no
 # TLS inspection web proxy in the egress traffic path.  If awk is unavailable on the local host, disable
 # the check by setting PROXY_CHECK_ENABLED=false below.
-PROXY_CHECK_ENABLED=true
+PROXY_CHECK_ENABLED=false
 
 # In Okta Privilege Access, course grained privilege elevation (admin checkbox in UI) is not currently 
 # supported. Therefore users create by the sftd agent will be normal users with no sudo rights.  Change
 # the below value to true to have this script automatically create agent lifecycle hooks that well
-# force all sftd created users to have full sudo rights, just like checking the admin box in the ASA UI.
+# force all sftd created users to have full sudo rights, just like checking the admin box in the OPA UI.
 DEFAULT_TO_ADMIN=false
 
-# By default, this script will not reinstall the current version of the ASA agents.  Change the below
+# By default, this script will not reinstall the current version of the OPA agents.  Change the below
 # value to "true" to force reinstallation.
 FORCE_REINSTALL=false
 
 # Install arguments will be updated automatically based on the FORCE_REINSTALL flag above.  Do not change
 # the default setting below.
 REPO_INSTALL_ARG="install"
+
+# Variables for new command-line options
+ENABLE_SSH_PASSWORD_AUTH=false
+CREATE_TEST_ADMIN_USER=""
+CREATE_TEST_USER=""
+FORCE_OVERWRITE_SERVER_CONFIG=false
+FORCE_OVERWRITE_GATEWAY_CONFIG=false
+CREATE_ORCHESTRATOR_GATEWAY=false
+
+# Flag to track if sshd needs reloading
+SSHD_NEEDS_RELOAD=false
+
 
 # List of required executabled
 required_executables=(cut awk grep sort curl tr openssl)
@@ -115,7 +127,7 @@ function getOsData(){
 	# Get CPU Architecture
 	CPU_ARCH=$(uname -m)
 
-	# Make necessary adjustments to align with ASA repo structure
+	# Make necessary adjustments to align with OPA repo structure
 	case "$DISTRIBUTION" in
 		amzn )
 			DISTRIBUTION="amazonlinux"
@@ -138,7 +150,7 @@ function getOsData(){
 			DISTRIBUTION="suse"
 			;;		
 		debian )
-			# debian stretch is no longer an ASA supported OS so there's no path for it in the repository
+			# debian stretch is no longer an OPA supported OS so there's no path for it in the repository
 			# however, packages for buster may continue to function on stretch even though that OS is no
 			# longer included in unit or regression testing. 
 			if [[ "$CODENAME" == "stretch" ]];then
@@ -149,28 +161,28 @@ function getOsData(){
 }
 
 function getServerName(){
-	# Determine the server name that will appear in ASA
+	# Determine the server name that will appear in OPA
 	if [[ $(curl -s -w "%{http_code}\n" http://169.254.169.254/latest/dynamic/instance-identity/document -o /dev/null) == "200" ]]; then
 		echo "This instance is hosted in AWS, attempting to retrieve Name tag."
 		# Retrieve the instance name tag
 		if [[ $(curl -s -w "%{http_code}\n" http://169.254.169.254/latest/meta-data/tags/instance/Name -o /dev/null) == "200" ]]; then
-			echo "Using AWS Name tag for server name in ASA."
+			echo "Using AWS Name tag for server name in OPA."
 			INSTANCE_NAME=$(curl -s http://169.254.169.254/latest/meta-data/tags/instance/Name)
 		else
-			echo "Unable to retrieve Name tag, using hostname for server name in ASA."
+			echo "Unable to retrieve Name tag, using hostname for server name in OPA."
 			INSTANCE_NAME=$HOSTNAME	
 		fi
-		echo "Instance not hosted in AWS, using hostname for server name in ASA."
+		echo "Instance not hosted in AWS, using hostname for server name in OPA."
 		echo "Instance Name: $INSTANCE_NAME"
 	else
 		INSTANCE_NAME=$HOSTNAME
 		echo "This host is not hosted in AWS"
 	fi
-	echo "Setting server name used in ASA to $INSTANCE_NAME."
+	echo "Setting server name used in OPA to $INSTANCE_NAME."
 }
 
 function updatePackageManager(){
-	# Add Okta ASA/OPA repository to local package manager
+	# Add Okta OPA repository to local package manager
 	case "$DISTRIBUTION" in
 		amazonlinux|rhel|centos|alma|fedora|rocky )
 			# Set the package manager to dnf if installed, otherwise use yum
@@ -184,7 +196,7 @@ function updatePackageManager(){
 				REPO_INSTALL_ARG="reinstall"
 			fi
 			
-			# Import ASA repo key 
+			# Import OPA repo key 
 			echo "Adding Okta repository to local package manager for Amazon Linux, RHEL, CentOS, Alma, or Fedora"
 			sudo rpm --import $REPO_URL/GPG-KEY-OktaPAM-2023
 			
@@ -217,10 +229,10 @@ function updatePackageManager(){
 			
 			echo "Adding Okta repository to local package manager for SLES or OpenSuse"
 			
-			# Import ASA repo key 
+			# Import OPA repo key 
 			sudo rpm --import $REPO_URL/GPG-KEY-OktaPAM-2023
 			
-			# Add/replace ASA repo to local package manager
+			# Add/replace OPA repo to local package manager
 			sudo zypper -q -n removerepo oktapam 2>>/dev/null
 			sudo zypper -q -n addrepo --check --name "OktaPAM" --enable --refresh --keep-packages --gpgcheck-strict $REPO_URL/repos/rpm/$REPO_RPM/suse/$VERSION/x86_64 oktapam
 			
@@ -241,10 +253,10 @@ function updatePackageManager(){
 			# Update package manager indexes 
 			sudo $PACKAGE_MANAGER update -qy
 			
-			# Ensure curl and gpg are installed, as they are needed to add ASA repo keys
+			# Ensure curl and gpg are installed, as they are needed to add OPA repo keys
 			sudo $PACKAGE_MANAGER install -qy curl gpg
 			
-			# Download and unwrap ASA repo keys
+			# Download and unwrap OPA repo keys
 			curl -fsSL $REPO_URL/GPG-KEY-OktaPAM-2023 | gpg --dearmor | sudo tee /usr/share/keyrings/oktapam-2023-archive-keyring.gpg > /dev/null
 			
 			# Create apt-get repo config file
@@ -286,26 +298,34 @@ function updatePackageManager(){
 function createSftdConfig() {
 	# Create sftd configuration file
 
-	echo "Creating basic sftd configuration"
 	sudo mkdir -p /etc/sft/
 
+	# Check if config file exists and handle accordingly
+	if [ -f /etc/sft/sftd.yaml ] && [ "$FORCE_OVERWRITE_SERVER_CONFIG" != "true" ]; then
+		echo "Server config /etc/sft/sftd.yaml already exists. Skipping creation."
+		echo "Use -F option to force overwrite."
+		return 0
+	fi
+
+	echo "Creating basic sftd configuration"
+
 	sftdcfg=$(cat <<-EOF
-	
+
 	---
-	
+
 	# CanonicalName: Specifies the name clients should use/see when connecting to this host.
-	
+
 	CanonicalName: "$INSTANCE_NAME"
-	
+
 	EOF
-	
+
 	)
 
 	echo -e "$sftdcfg" | sudo tee /etc/sft/sftd.yaml
 }
 
 function createSftdEnrollmentToken(){
-	# Create an ASA Server Tools enrollment token file with the provide token value
+	# Create an OPA Server Tools enrollment token file with the provide token value
 	if [ -z "$SERVER_ENROLLMENT_TOKEN" ]; then
 		echo "Unable to create sftd enrollment token. SERVER_ENROLLMENT_TOKEN is not set or is empty"
 	else
@@ -318,7 +338,7 @@ function createSftdEnrollmentToken(){
 }
 
 function createSftGatewaySetupToken(){
-	# Create an ASA Gateway setup token file with the provided token value
+	# Create an OPA Gateway setup token file with the provided token value
 	
 	if [ -z "$GATEWAY_TOKEN" ]; then
 		echo "Unable to create sft-gatewayd setup token. GATEWAY_TOKEN is not set or is empty"
@@ -340,14 +360,42 @@ function createSftGatewaySetupToken(){
 	fi
 }
 
-function createSftGwConfigRDP(){
-	# Create an ASA Gateway configuration file for handling SSH & RDP traffic.
+function createSftGwConfig(){
+	# Create an OPA Gateway configuration file for handling only SSH traffic.
+
+	# Check if config file exists and handle accordingly
+	if [ -f /etc/sft/sft-gatewayd.yaml ] && [ "$FORCE_OVERWRITE_GATEWAY_CONFIG" != "true" ]; then
+		echo "Gateway config /etc/sft/sft-gatewayd.yaml already exists. Skipping creation."
+		echo "Use -W option to force overwrite."
+		return 0
+	fi
+
 	sudo mkdir -p /var/lib/sft-gatewayd
 	sftgwcfg=$(cat <<-EOF
 	#Loglevel: debug
 
-	LDAP:
-	  StartTLS: false
+	LogFileNameFormats:
+	  SSHRecording: "{{.Protocol}}~{{.StartTime}}~{{.TeamName}}~{{.ProjectName}}~{{.ServerName}}~{{.Username}}~"
+
+	EOF
+
+	)
+	echo -e "$sftgwcfg" | sudo tee /etc/sft/sft-gatewayd.yaml
+}
+
+function createSftGwConfigRDP(){
+	# Create an OPA Gateway configuration file for handling SSH & RDP traffic.
+
+	# Check if config file exists and handle accordingly
+	if [ -f /etc/sft/sft-gatewayd.yaml ] && [ "$FORCE_OVERWRITE_GATEWAY_CONFIG" != "true" ]; then
+		echo "Gateway config /etc/sft/sft-gatewayd.yaml already exists. Skipping creation."
+		echo "Use -W option to force overwrite."
+		return 0
+	fi
+
+	sudo mkdir -p /var/lib/sft-gatewayd
+	sftgwcfg=$(cat <<-EOF
+	#Loglevel: debug
 
 	RDP:
 	  Enabled: true
@@ -358,7 +406,35 @@ function createSftGwConfigRDP(){
 	  RDPRecording: "{{.Protocol}}~{{.StartTime}}~{{.TeamName}}~{{.ProjectName}}~{{.ServerName}}~{{.Username}}~"
 
 	EOF
-	
+
+	)
+	echo -e "$sftgwcfg" | sudo tee /etc/sft/sft-gatewayd.yaml
+}
+
+function createSftGwConfigOrchestrator(){
+	# Create an OPA Gateway configuration file for Infrastructure Orchestrator.
+
+	# Check if config file exists and handle accordingly
+	if [ -f /etc/sft/sft-gatewayd.yaml ] && [ "$FORCE_OVERWRITE_GATEWAY_CONFIG" != "true" ]; then
+		echo "Gateway config /etc/sft/sft-gatewayd.yaml already exists. Skipping creation."
+		echo "Use -W option to force overwrite."
+		return 0
+	fi
+
+	echo "Creating Infrastructure Orchestrator gateway configuration"
+	sudo mkdir -p /var/lib/sft-gatewayd
+	sftgwcfg=$(cat <<-EOF
+	LogLevel: debug
+
+	RDP:
+	  Enabled: false
+	  
+	Orchestrator:
+	  Enabled: true
+	  BinaryPath: /usr/sbin/sft-orchestrator
+
+	EOF
+
 	)
 	echo -e "$sftgwcfg" | sudo tee /etc/sft/sft-gatewayd.yaml
 }
@@ -427,23 +503,8 @@ function setDefaultAdmin(){
 	sudo chmod 700 /usr/lib/sftd/hooks/user-deleted.d/remove-opa-admin.sh
 }
 
-function createSftGwConfig(){
-	# Create an ASA Gateway configuration file for handling only SSH traffic.
-	sudo mkdir -p /var/lib/sft-gatewayd
-	sftgwcfg=$(cat <<-EOF
-	#Loglevel: debug
-	
-	LogFileNameFormats:
-	  SSHRecording: "{{.Protocol}}~{{.StartTime}}~{{.TeamName}}~{{.ProjectName}}~{{.ServerName}}~{{.Username}}~"
-	
-	EOF
-
-	)
-	echo -e "$sftgwcfg" | sudo tee /etc/sft/sft-gatewayd.yaml
-}
-
 function installSftd(){
-	# Install ASA Server tools
+	# Install OPA Server tools
 	case "$DISTRIBUTION" in 
 		freebsd )
 			sudo pkg $REPO_INSTALL_ARG -y libsecret
@@ -461,7 +522,7 @@ function installSftd(){
 }
 
 function installSft(){
-	# Install ASA Client tools
+	# Install OPA Client tools
 	case "$DISTRIBUTION" in 
 		freebsd )
 			sudo pkg $REPO_INSTALL_ARG -y ./scaleft-client-tools-$highest_version.pkg
@@ -476,14 +537,17 @@ function installSft(){
 }
 
 function installSft-Gateway(){
-	# Install ASA Gateway
-	if [[ "$DISTRIBUTION" == "rhel" && ( "$VERSION" == "8" || "$VERSION" == "9" ) ]] || [[ "$DISTRIBUTION" == "ubuntu" && ( "$VERSION" == "20.04" || "$VERSION" == "22.04" || "$VERSION" == "24.04" ) ]]; then
+	# Install OPA Gateway
+	if [[ "$CREATE_ORCHESTRATOR_GATEWAY" == "true" ]]; then
+		# Use orchestrator config regardless of OS
+		createSftGwConfigOrchestrator
+	elif [[ "$DISTRIBUTION" == "rhel" && ( "$VERSION" == "8" || "$VERSION" == "9" ) ]] || [[ "$DISTRIBUTION" == "ubuntu" && ( "$VERSION" == "20.04" || "$VERSION" == "22.04" || "$VERSION" == "24.04" ) ]]; then
 		sudo $PACKAGE_MANAGER $REPO_INSTALL_ARG scaleft-rdp-transcoder -q -y
 		createSftGwConfigRDP
 	else
 		createSftGwConfig
 	fi
-	case "$DISTRIBUTION" in 
+	case "$DISTRIBUTION" in
 		freebsd )
 			sudo pkg $REPO_INSTALL_ARG -y ./scaleft-gateway-$highest_version.pkg
 			sudo mkdir /var/log/sft/sessions
@@ -499,12 +563,92 @@ function installSft-Gateway(){
 	esac
 }
 
+function enableSshPasswordAuth() {
+	# Enable password authentication for SSH
+	echo "Enabling SSH password authentication..."
+	sudo mkdir -p /etc/ssh/sshd_config.d
+	echo "PasswordAuthentication yes" | sudo tee /etc/ssh/sshd_config.d/05-opa-settings.conf > /dev/null
+	SSHD_NEEDS_RELOAD=true
+	echo "SSH password authentication enabled. SSH daemon will be reloaded."
+}
+
+function createTestAdminUser() {
+	# Create a test user with sudo privileges
+	local username="$1"
+	echo "Creating test admin user: $username"
+	if id "$username" &>/dev/null; then
+		echo "User '$username' already exists. Skipping creation."
+	else
+		sudo useradd -m -s /bin/bash "$username"
+		echo "User '$username' created."
+	fi
+
+	local sudoers_file="/etc/sudoers.d/99-test-user-$username"
+	echo "$username ALL=(ALL) NOPASSWD:ALL" | sudo tee "$sudoers_file" > /dev/null
+	sudo chmod 440 "$sudoers_file"
+	echo "Sudo privileges granted to '$username'."
+}
+
+function createTestUser() {
+	# Create a test user without sudo privileges
+	local username="$1"
+	echo "Creating test user: $username"
+	if id "$username" &>/dev/null; then
+		echo "User '$username' already exists. Skipping creation."
+	else
+		sudo useradd -m -s /bin/bash "$username"
+		echo "User '$username' created."
+	fi
+}
+
+function reloadSshd() {
+    #check SSHD configuration to prevent bricking SSH access
+	echo "Validating SSHD configuration before applying..."
+	if command -v sshd >/dev/null 2>&1; then
+		if ! sudo sshd -t; then
+			echo "ERROR: sshd config test failed. Not reloading SSH."
+			return 1
+		fi
+		echo "SSHD config validation OK."
+	else
+		echo "WARNING: sshd binary not found; skipping syntax validation."
+	fi
+
+	echo "Applying SSHD config change (reload preferred; restart only if reload fails)..."
+
+	# Try in order: systemd ssh, systemd sshd, sysv ssh, sysv sshd.
+	if command -v systemctl >/dev/null 2>&1; then
+		if systemctl list-unit-files --no-legend 2>/dev/null | awk '{print $1}' | grep -qx 'ssh.service'; then
+			sudo systemctl reload ssh.service 2>/dev/null || sudo systemctl restart ssh.service
+			echo "ssh.service reloaded/restarted."
+			return 0
+		fi
+		if systemctl list-unit-files --no-legend 2>/dev/null | awk '{print $1}' | grep -qx 'sshd.service'; then
+			sudo systemctl reload sshd.service 2>/dev/null || sudo systemctl restart sshd.service
+			echo "sshd.service reloaded/restarted."
+			return 0
+		fi
+	fi
+
+	if command -v service >/dev/null 2>&1; then
+		if sudo service ssh reload 2>/dev/null || sudo service ssh restart 2>/dev/null; then
+			echo "ssh service reloaded/restarted via 'service'."
+			return 0
+		elif sudo service sshd reload 2>/dev/null || sudo service sshd restart 2>/dev/null; then
+			echo "sshd service reloaded/restarted via 'service'."
+			return 0
+		fi
+	fi
+
+	echo "WARNING: SSH service manager not found. Config applied but SSH not reloaded."
+}
+
 function checkNoProxy() {
 	# Attempt to detect presence of tls-inspecting web proxy
 	# Define your target domain and the expected public key fingerprints (SHA-256)
 	# Set target website and known fingerprints
 	website="dist.scaleft.com"
-	known_server_cert_sha256_fingerprint="D71C76A863B4EFFCA51C36ACF0CA10378039124D4CBD69495DD1F2BE87FDCB80"
+	known_server_cert_sha256_fingerprint="36A5672BA44AF889214EDA999B5556C036D1293079EFFEFC37D2A91033619434"
 	known_intermediate_cert_sha256_fingerprint="B0F330A31A0C50987E1C3A7BB02C2DDA682991D3165B517BD44FBA4A6020BD94"
 
 	# Get certificate chain
@@ -532,9 +676,9 @@ function checkNoProxy() {
 				echo "Okta Advanced Server Access uses certificate pinning to prevent MITM attacks."
 				echo "Transparent web proxies that perform TLS inspection replace Okta's certificates"
 				echo "with their own, causing the pinned certificate check to fail.  This will prevent"
-				echo "ASA agents, gateways, and clients from successfully connecting to the ASA platform,"
+				echo "OPA agents, gateways, and clients from successfully connecting to the OPA platform,"
 				echo "causing enrollment, user & group provisioning, and audit logging to fail."
-				echo "For ASA to function, you'll need to contact your web-proxy administrators and"
+				echo "For OPA to function, you'll need to contact your web-proxy administrators and"
 				echo "request the addition of *.scaleft.com, *.okta.com, and *.oktapreview.com to the"
 				echo "tls-inspection exclusion list."
 				exit 1					
@@ -554,7 +698,7 @@ check_required_executables
 INSTALLED_SOMETHING=false
 
 # Parse command line options for overrides to static variable sets
-while getopts ":S:G:sagcr:phf" opt; do
+while getopts ":S:G:U:u:sagcr:phfEFWO" opt; do
 	case ${opt} in
 		a )
 			DEFAULT_TO_ADMIN=true
@@ -571,6 +715,9 @@ while getopts ":S:G:sagcr:phf" opt; do
 		f )
 			FORCE_REINSTALL=true
 			;;
+		F )
+			FORCE_OVERWRITE_SERVER_CONFIG=true
+			;;
 		g|G )
 			INSTALL_GATEWAY=true
 			if [[ "$OPTARG" =~ ^-.* ]]; then
@@ -579,6 +726,13 @@ while getopts ":S:G:sagcr:phf" opt; do
 			else
 				GATEWAY_TOKEN=$OPTARG
 			fi
+			;;
+		W )
+			FORCE_OVERWRITE_GATEWAY_CONFIG=true
+			;;
+		O )
+			CREATE_ORCHESTRATOR_GATEWAY=true
+			INSTALL_GATEWAY=true
 			;;
 		c )
 			INSTALL_CLIENT_TOOLS=true
@@ -592,18 +746,33 @@ while getopts ":S:G:sagcr:phf" opt; do
 			fi
 			;;
 		p )
-			PROXY_CHECK_ENABLED=false
+			PROXY_CHECK_ENABLED=true
+			;;
+		E )
+			ENABLE_SSH_PASSWORD_AUTH=true
+			;;
+		U )
+			CREATE_TEST_ADMIN_USER=$OPTARG
+			;;
+		u )
+			CREATE_TEST_USER=$OPTARG
 			;;
 		h )
-			echo "Usage: LinuxAndBsdAsaInstall.sh [-s] [-S server_enrollment_token] [-g] [-G gateway_setup_token] [-c|-r [prod|test]] [-p] [-h] "
+			echo "Usage: $(basename "$0") [options]"
 			echo "    -a                          Create agent lifecycle hooks to grant sudo to all sftd created users."
-			echo "    -s                          Install ASA Server Tools without providing an enrollment token."
-			echo "    -S server_enrollment_token  Install ASA Server Tools with the provided enrollment token."
+			echo "    -s                          Install OPA Server Tools without providing an enrollment token."
+			echo "    -S server_enrollment_token  Install OPA Server Tools with the provided enrollment token."
 			echo "    -f                          Force re-installation of existing packages."
-			echo "    -g                          Install ASA Gateway without providing a gateway setup token."
-			echo "    -G gateway_setup_token      Install ASA Gateway with the provided gateway token."
-			echo "    -c                          Install ASA Client Tools."
+			echo "    -F                          Force overwrite of server config (/etc/sft/sftd.yaml) if it exists."
+			echo "    -g                          Install OPA Gateway without providing a gateway setup token."
+			echo "    -G gateway_setup_token      Install OPA Gateway with the provided gateway token."
+			echo "    -W                          Force overwrite of gateway config (/etc/sft/sft-gatewayd.yaml) if it exists."
+			echo "    -O                          Create an Infrastructure Orchestrator gateway config (implies -g)."
+			echo "    -c                          Install OPA Client Tools."
 			echo "    -r                          Set installation branch, default is prod."
+			echo "    -E                          Enable password authentication for SSH."
+			echo "    -U username                 Create a test user with sudo privileges."
+			echo "    -u username                 Create a test user without sudo privileges."
 			echo "    -p                          Skip detection of TLS inspection web proxy."
 			echo "    -h                          Display this help message."
 			exit 0
@@ -613,13 +782,11 @@ while getopts ":S:G:sagcr:phf" opt; do
 			exit 1
 			;;
 		: )
-			if [ "$OPTARG" == "s" ]; then
-				# The -s option is missing an argument, but it's optional, so just ignore the error
-				continue
-			else
+			# Options S, G, U, u, r require an argument.
+			if [[ "SGUur" =~ $OPTARG ]]; then
 				echo "Option -$OPTARG requires an argument." >&2
 				exit 1
-			fi      
+			fi
 			;;
 	esac
 done
@@ -632,14 +799,29 @@ else
 	echo "agent enrollment and checkins to fail."
 fi
 
+# Execute new functions based on command-line flags
+if [[ "$ENABLE_SSH_PASSWORD_AUTH" == "true" ]]; then
+	enableSshPasswordAuth
+	INSTALLED_SOMETHING=true
+fi
+
+if [[ -n "$CREATE_TEST_ADMIN_USER" ]]; then
+	createTestAdminUser "$CREATE_TEST_ADMIN_USER"
+	INSTALLED_SOMETHING=true
+fi
+
+if [[ -n "$CREATE_TEST_USER" ]]; then
+	createTestUser "$CREATE_TEST_USER"
+	INSTALLED_SOMETHING=true
+fi
 # If something needs to be installed, collect necessary information and update the package manager
-if [[ "$INSTALL_SERVER_TOOLS" == "true" ]] || [[ "$INSTALL_GATEWAY" == "true" ]] || [[ "$INSTALL_CLIENT_TOOLS" == "true" ]];then
+if [[ "$INSTALL_SERVER_TOOLS" == "true" ]] || [[ "$INSTALL_GATEWAY" == "true" ]] || [[ "$INSTALL_CLIENT_TOOLS" == "true" ]]; then
 	setRepoUrl
 	getOsData
 	updatePackageManager
 fi
 
-# Perform necessary steps to install ASA Server Tools
+# Perform necessary steps to install OPA Server Tools
 if [[ "$INSTALL_SERVER_TOOLS" == "true" ]];then
 	getServerName
 	createSftdConfig
@@ -648,7 +830,7 @@ if [[ "$INSTALL_SERVER_TOOLS" == "true" ]];then
 	INSTALLED_SOMETHING=true
 fi
 
-# Perform necessary steps to install ASA gateway
+# Perform necessary steps to install OPA gateway
 if [[ "$INSTALL_GATEWAY" == "true" ]];then
 	createSftGatewaySetupToken
 	installSft-Gateway
@@ -656,7 +838,7 @@ if [[ "$INSTALL_GATEWAY" == "true" ]];then
 	INSTALLED_SOMETHING=true
 fi
 
-# Perform necessary steps to install ASA Client Tools
+# Perform necessary steps to install OPA Client Tools
 if [[ "$INSTALL_CLIENT_TOOLS" == "true" ]];then
 	installSft
 	INSTALLED_SOMETHING=true
@@ -666,6 +848,11 @@ fi
 if [[ "$DEFAULT_TO_ADMIN" == "true" ]];then
 	setDefaultAdmin
 	echo "ScaleFT-Server-Tools lifecycle hooks created to ensure sftd provisioned users have sudo rights."
+fi
+
+# Reload sshd if any changes were made that require it
+if [[ "$SSHD_NEEDS_RELOAD" = "true" ]]; then
+    reloadSshd
 fi
 
 if [[ "$INSTALLED_SOMETHING" == "false" ]];then
