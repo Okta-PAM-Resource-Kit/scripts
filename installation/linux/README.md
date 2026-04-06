@@ -2,7 +2,7 @@
 
 ## Overview
 
-LinuxAndBsdOPAInstall.sh is intended to function as a universal install script for supported Linux versions of the OPA Server Tools, OPA Gateway and RDP session Transcoder, and OPA Client Tools.  
+LinuxUniversalOPAInstall.sh is intended to function as a universal install script for supported Linux versions of the OPA Server Tools, OPA Gateway and RDP session Transcoder, and OPA Client Tools.  
 
 **_These scripts are not supported by Okta, and no warranty is expressed or implied.  Please review and understand all scripts before using.  Use at your own risk._**
 
@@ -29,7 +29,7 @@ This script can be run interactively from the command line using arguments, or p
 **_This script requires bash, awk, curl, and openssl to run successfully._**
 
 ```bash
-LinuxAndBsdOPAInstall.sh [options]
+LinuxUniversalOPAInstall.sh [options]
     -a                          Create agent lifecycle hooks to grant sudo to all sftd created users.
     -s                          Install OPA Server Tools without providing an enrollment token.
     -S server_enrollment_token  Install OPA Server Tools with the provided enrollment token.
@@ -74,9 +74,9 @@ To automate installation using AWS EC2 User Data, GCP startup-script, or orchest
 ```bash
 #!/usr/bin/env bash
 #Download, make executable, and launch install script with desired options.
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdOPAInstall.sh
-chmod +x LinuxAndBsdOPAInstall.sh
-./LinuxAndBsdOPAInstall.sh -S enrollment_token
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxUniversalOPAInstall.sh
+chmod +x LinuxUniversalOPAInstall.sh
+./LinuxUniversalOPAInstall.sh -S enrollment_token
 ```
 
 ### Server and Client Agent Installation
@@ -84,9 +84,9 @@ chmod +x LinuxAndBsdOPAInstall.sh
 ```bash
 #!/usr/bin/env bash
 #Download, make executable, and launch install script with desired options.
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdOPAInstall.sh
-chmod +x LinuxAndBsdOPAInstall.sh
-./LinuxAndBsdOPAInstall.sh -S enrollment_token -c
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxUniversalOPAInstall.sh
+chmod +x LinuxUniversalOPAInstall.sh
+./LinuxUniversalOPAInstall.sh -S enrollment_token -c
 ```
 
 ### Gateway Installation
@@ -94,9 +94,9 @@ chmod +x LinuxAndBsdOPAInstall.sh
 ```bash
 #!/usr/bin/env bash
 #Download, make executable, and launch install script with desired options.
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdOPAInstall.sh
-chmod +x LinuxAndBsdOPAInstall.sh
-./LinuxAndBsdOPAInstall.sh -G setup_token
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxUniversalOPAInstall.sh
+chmod +x LinuxUniversalOPAInstall.sh
+./LinuxUniversalOPAInstall.sh -G setup_token
 ```
 
 ### Server Agent and Gateway Installation
@@ -104,9 +104,9 @@ chmod +x LinuxAndBsdOPAInstall.sh
 ```bash
 #!/usr/bin/env bash
 #Download, make executable, and launch install script with desired options.
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdOPAInstall.sh
-chmod +x LinuxAndBsdOPAInstall.sh
-./LinuxAndBsdOPAInstall.sh -S enrollment_token -G setup_token
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxUniversalOPAInstall.sh
+chmod +x LinuxUniversalOPAInstall.sh
+./LinuxUniversalOPAInstall.sh -S enrollment_token -G setup_token
 ```
 
 ### Infrastructure Orchestrator Gateway Installation
@@ -114,7 +114,7 @@ chmod +x LinuxAndBsdOPAInstall.sh
 ```bash
 #!/usr/bin/env bash
 #Download, make executable, and launch install script with desired options.
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxAndBsdOPAInstall.sh
-chmod +x LinuxAndBsdOPAInstall.sh
-./LinuxAndBsdOPAInstall.sh -O -G setup_token
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/installation/linux/LinuxUniversalOPAInstall.sh
+chmod +x LinuxUniversalOPAInstall.sh
+./LinuxUniversalOPAInstall.sh -O -G setup_token
 ```
