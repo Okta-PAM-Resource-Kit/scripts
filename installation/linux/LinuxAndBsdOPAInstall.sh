@@ -58,6 +58,10 @@ FORCE_OVERWRITE_SERVER_CONFIG=false
 FORCE_OVERWRITE_GATEWAY_CONFIG=false
 CREATE_ORCHESTRATOR_GATEWAY=false
 
+# Flags to track if configs were overwritten (for restart logic)
+SERVER_CONFIG_OVERWRITTEN=false
+GATEWAY_CONFIG_OVERWRITTEN=false
+
 # Flag to track if sshd needs reloading
 SSHD_NEEDS_RELOAD=false
 
@@ -132,29 +136,52 @@ function getOsData(){
 		amzn )
 			DISTRIBUTION="amazonlinux"
 			;;
+		fedora )
+			echo "ERROR: Fedora is not supported."
+			echo "OPA packages are not available for Fedora."
+			echo "Please use RHEL, CentOS, Rocky Linux, or another supported distribution."
+			exit 1
+			;;
 		rocky|ol )
 			getVersionInteger
+			# Check if version 7 or earlier (no longer supported for Oracle Linux)
+			if [[ "$VERSION" -le 7 ]]; then
+				echo "ERROR: $DISTRIBUTION version $VERSION is no longer supported."
+				echo "OPA packages are not available for this version."
+				echo "Please upgrade to version 8 or later."
+				exit 1
+			fi
 			DISTRIBUTION="rhel"
 			;;
-		rhel )
+		rhel|centos )
 			getVersionInteger
-			;;
-		freebsd )
-			getVersionInteger
-			if [[ "$CPU_ARCH" == "x86_64" ]];then
-				CPU_ARCH="amd64"
+			# Check if version 7 or earlier (no longer supported)
+			if [[ "$VERSION" -le 7 ]]; then
+				echo "ERROR: RHEL/CentOS version $VERSION is no longer supported."
+				echo "OPA packages are not available for this version."
+				echo "Please upgrade to RHEL/CentOS 8 or later, or use Rocky Linux 8+."
+				exit 1
 			fi
+			DISTRIBUTION="rhel"
 			;;
 		sles|opensuse-leap )
 			getVersionInteger
+			# Check for unsupported SLES/OpenSuse versions (12 and earlier)
+			if [[ "$VERSION" -lt 15 ]]; then
+				echo "ERROR: SLES/OpenSuse version $VERSION is no longer supported."
+				echo "OPA packages are not available for this version."
+				echo "Please upgrade to SLES/OpenSuse 15 or later."
+				exit 1
+			fi
 			DISTRIBUTION="suse"
-			;;		
+			;;
 		debian )
-			# debian stretch is no longer an OPA supported OS so there's no path for it in the repository
-			# however, packages for buster may continue to function on stretch even though that OS is no
-			# longer included in unit or regression testing. 
-			if [[ "$CODENAME" == "stretch" ]];then
-				CODENAME="buster"
+			# Check for unsupported Debian versions (9 and earlier)
+			if [[ "$CODENAME" == "stretch" || "$CODENAME" == "jessie" ]];then
+				echo "ERROR: Debian $CODENAME (version 9 or earlier) is no longer supported."
+				echo "OPA packages are not available for this version."
+				echo "Please upgrade to Debian 10 (buster) or later."
+				exit 1
 			fi
 			;;
 	esac
@@ -184,7 +211,7 @@ function getServerName(){
 function updatePackageManager(){
 	# Add Okta OPA repository to local package manager
 	case "$DISTRIBUTION" in
-		amazonlinux|rhel|centos|alma|fedora|rocky )
+		amazonlinux|rhel|centos|alma|rocky )
 			# Set the package manager to dnf if installed, otherwise use yum
 			if which dnf >/dev/null 2>&1;then
 				PACKAGE_MANAGER="dnf"
@@ -196,8 +223,8 @@ function updatePackageManager(){
 				REPO_INSTALL_ARG="reinstall"
 			fi
 			
-			# Import OPA repo key 
-			echo "Adding Okta repository to local package manager for Amazon Linux, RHEL, CentOS, Alma, or Fedora"
+			# Import OPA repo key
+			echo "Adding Okta repository to local package manager for Amazon Linux, RHEL, CentOS, Rocky, Alma, or Oracle Linux"
 			sudo rpm --import $REPO_URL/GPG-KEY-OktaPAM-2023
 			
 			# Create the yum repo artifact for inclusion in the package manager
@@ -265,29 +292,6 @@ function updatePackageManager(){
 			# Update package manager indexes again
 			sudo $PACKAGE_MANAGER update -qy
 			;;
-		freebsd )
-			#adjust install command if forcing reinstall
-			if [[ "$FORCE_REINSTALL" == "true" ]]; then
-				REPO_INSTALL_ARG="install -f"
-			fi
-			
-			# There is currenlty no pkg repo integration, so downloading the packages locally for installation
-			pkg_base_url="$REPO_URL/repos/$DISTRIBUTION/$REPO_BSD/$VERSION/$CPU_ARCH"
-
-			# Use cURL to get the directory listing from the URL
-			response=$(curl -s $pkg_base_url/)
-
-			# Use grep to extract the directories from the response
-			pkg_versions=$(echo "$response" | grep -o ">[0-9.]*<" | tr -d '<>' | sort -V)
-
-			# Get the highest version directory from the list
-			highest_version=$(echo "$pkg_versions" | tail -n1 )
-
-			# Download the latest packages
-			curl -O "$pkg_base_url/$highest_version/scaleft-server-tools-$highest_version.pkg"
-			curl -O "$pkg_base_url/$highest_version/scaleft-client-tools-$highest_version.pkg"
-			curl -O "$pkg_base_url/$highest_version/scaleft-gateway-$highest_version.pkg"
-			;;
 		* )
 			echo "Unrecognized OS type: $DISTRIBUTION"
 			exit 1
@@ -307,7 +311,13 @@ function createSftdConfig() {
 		return 0
 	fi
 
-	echo "Creating basic sftd configuration"
+	# Track if we're overwriting an existing config
+	if [ -f /etc/sft/sftd.yaml ] && [ "$FORCE_OVERWRITE_SERVER_CONFIG" == "true" ]; then
+		SERVER_CONFIG_OVERWRITTEN=true
+		echo "Overwriting existing server config /etc/sft/sftd.yaml"
+	else
+		echo "Creating basic sftd configuration"
+	fi
 
 	sftdcfg=$(cat <<-EOF
 
@@ -339,18 +349,11 @@ function createSftdEnrollmentToken(){
 
 function createSftGatewaySetupToken(){
 	# Create an OPA Gateway setup token file with the provided token value
-	
+
 	if [ -z "$GATEWAY_TOKEN" ]; then
 		echo "Unable to create sft-gatewayd setup token. GATEWAY_TOKEN is not set or is empty"
 	else
-		case "$DISTRIBUTION" in 
-			freebsd )
-				GW_TOKEN_PATH=/var/db/sft-gatewayd
-				;;
-			* )
-				GW_TOKEN_PATH=/var/lib/sft-gatewayd
-				;;
-		esac
+		GW_TOKEN_PATH=/var/lib/sft-gatewayd
 
 		echo "Creating sft-gatewayd setup token"
 
@@ -368,6 +371,14 @@ function createSftGwConfig(){
 		echo "Gateway config /etc/sft/sft-gatewayd.yaml already exists. Skipping creation."
 		echo "Use -W option to force overwrite."
 		return 0
+	fi
+
+	# Track if we're overwriting an existing config
+	if [ -f /etc/sft/sft-gatewayd.yaml ] && [ "$FORCE_OVERWRITE_GATEWAY_CONFIG" == "true" ]; then
+		GATEWAY_CONFIG_OVERWRITTEN=true
+		echo "Overwriting existing gateway config /etc/sft/sft-gatewayd.yaml"
+	else
+		echo "Creating gateway configuration"
 	fi
 
 	sudo mkdir -p /var/lib/sft-gatewayd
@@ -391,6 +402,14 @@ function createSftGwConfigRDP(){
 		echo "Gateway config /etc/sft/sft-gatewayd.yaml already exists. Skipping creation."
 		echo "Use -W option to force overwrite."
 		return 0
+	fi
+
+	# Track if we're overwriting an existing config
+	if [ -f /etc/sft/sft-gatewayd.yaml ] && [ "$FORCE_OVERWRITE_GATEWAY_CONFIG" == "true" ]; then
+		GATEWAY_CONFIG_OVERWRITTEN=true
+		echo "Overwriting existing gateway config /etc/sft/sft-gatewayd.yaml"
+	else
+		echo "Creating gateway configuration with RDP support"
 	fi
 
 	sudo mkdir -p /var/lib/sft-gatewayd
@@ -421,14 +440,21 @@ function createSftGwConfigOrchestrator(){
 		return 0
 	fi
 
-	echo "Creating Infrastructure Orchestrator gateway configuration"
+	# Track if we're overwriting an existing config
+	if [ -f /etc/sft/sft-gatewayd.yaml ] && [ "$FORCE_OVERWRITE_GATEWAY_CONFIG" == "true" ]; then
+		GATEWAY_CONFIG_OVERWRITTEN=true
+		echo "Overwriting existing gateway config /etc/sft/sft-gatewayd.yaml"
+	else
+		echo "Creating Infrastructure Orchestrator gateway configuration"
+	fi
+
 	sudo mkdir -p /var/lib/sft-gatewayd
 	sftgwcfg=$(cat <<-EOF
 	LogLevel: debug
 
 	RDP:
 	  Enabled: false
-	  
+
 	Orchestrator:
 	  Enabled: true
 	  BinaryPath: /usr/sbin/sft-orchestrator
@@ -505,13 +531,7 @@ function setDefaultAdmin(){
 
 function installSftd(){
 	# Install OPA Server tools
-	case "$DISTRIBUTION" in 
-		freebsd )
-			sudo pkg $REPO_INSTALL_ARG -y libsecret
-			sudo pkg $REPO_INSTALL_ARG -y ./scaleft-server-tools-$highest_version.pkg
-			sudo sysrc sftd_enable=YES
-			sudo service sftd start
-			;;
+	case "$DISTRIBUTION" in
 		suse )
 			sudo $PACKAGE_MANAGER -q -n $REPO_INSTALL_ARG scaleft-server-tools
 			;;
@@ -523,10 +543,7 @@ function installSftd(){
 
 function installSft(){
 	# Install OPA Client tools
-	case "$DISTRIBUTION" in 
-		freebsd )
-			sudo pkg $REPO_INSTALL_ARG -y ./scaleft-client-tools-$highest_version.pkg
-			;;
+	case "$DISTRIBUTION" in
 		suse )
 			sudo $PACKAGE_MANAGER -q -n $REPO_INSTALL_ARG scaleft-client-tools
 			;;
@@ -548,12 +565,6 @@ function installSft-Gateway(){
 		createSftGwConfig
 	fi
 	case "$DISTRIBUTION" in
-		freebsd )
-			sudo pkg $REPO_INSTALL_ARG -y ./scaleft-gateway-$highest_version.pkg
-			sudo mkdir /var/log/sft/sessions
-			sudo sysrc sft_gatewayd_enable=YES
-			sudo service sft-gatewayd start
-			;;
 		suse )
 			sudo $PACKAGE_MANAGER -q -n $REPO_INSTALL_ARG scaleft-gateway
 			;;
@@ -641,6 +652,52 @@ function reloadSshd() {
 	fi
 
 	echo "WARNING: SSH service manager not found. Config applied but SSH not reloaded."
+}
+
+function restartSftd() {
+	# Restart the sftd (server agent) service
+	echo "Restarting sftd service to apply configuration changes..."
+
+	if command -v systemctl >/dev/null 2>&1; then
+		sudo systemctl restart sftd.service
+		if [ $? -eq 0 ]; then
+			echo "sftd service restarted successfully."
+		else
+			echo "WARNING: Failed to restart sftd service."
+		fi
+	elif command -v service >/dev/null 2>&1; then
+		sudo service sftd restart
+		if [ $? -eq 0 ]; then
+			echo "sftd service restarted successfully."
+		else
+			echo "WARNING: Failed to restart sftd service."
+		fi
+	else
+		echo "WARNING: Service manager not found. Unable to restart sftd."
+	fi
+}
+
+function restartSftGatewayd() {
+	# Restart the sft-gatewayd (gateway) service
+	echo "Restarting sft-gatewayd service to apply configuration changes..."
+
+	if command -v systemctl >/dev/null 2>&1; then
+		sudo systemctl restart sft-gatewayd.service
+		if [ $? -eq 0 ]; then
+			echo "sft-gatewayd service restarted successfully."
+		else
+			echo "WARNING: Failed to restart sft-gatewayd service."
+		fi
+	elif command -v service >/dev/null 2>&1; then
+		sudo service sft-gatewayd restart
+		if [ $? -eq 0 ]; then
+			echo "sft-gatewayd service restarted successfully."
+		else
+			echo "WARNING: Failed to restart sft-gatewayd service."
+		fi
+	else
+		echo "WARNING: Service manager not found. Unable to restart sft-gatewayd."
+	fi
 }
 
 function checkNoProxy() {
@@ -732,7 +789,6 @@ while getopts ":S:G:U:u:sagcr:phfEFWO" opt; do
 			;;
 		O )
 			CREATE_ORCHESTRATOR_GATEWAY=true
-			INSTALL_GATEWAY=true
 			;;
 		c )
 			INSTALL_CLIENT_TOOLS=true
@@ -767,7 +823,7 @@ while getopts ":S:G:U:u:sagcr:phfEFWO" opt; do
 			echo "    -g                          Install OPA Gateway without providing a gateway setup token."
 			echo "    -G gateway_setup_token      Install OPA Gateway with the provided gateway token."
 			echo "    -W                          Force overwrite of gateway config (/etc/sft/sft-gatewayd.yaml) if it exists."
-			echo "    -O                          Create an Infrastructure Orchestrator gateway config (implies -g)."
+			echo "    -O                          Create an Infrastructure Orchestrator gateway config (use with -g/-G to install)."
 			echo "    -c                          Install OPA Client Tools."
 			echo "    -r                          Set installation branch, default is prod."
 			echo "    -E                          Enable password authentication for SSH."
@@ -814,6 +870,31 @@ if [[ -n "$CREATE_TEST_USER" ]]; then
 	createTestUser "$CREATE_TEST_USER"
 	INSTALLED_SOMETHING=true
 fi
+
+# Handle -F flag without -s/-S: overwrite server config and prepare to restart
+if [[ "$FORCE_OVERWRITE_SERVER_CONFIG" == "true" ]] && [[ "$INSTALL_SERVER_TOOLS" != "true" ]]; then
+	getOsData
+	getServerName
+	createSftdConfig
+	INSTALLED_SOMETHING=true
+fi
+
+# Handle -W or -O flags without -g/-G: overwrite gateway config and prepare to restart
+if [[ ("$FORCE_OVERWRITE_GATEWAY_CONFIG" == "true" || "$CREATE_ORCHESTRATOR_GATEWAY" == "true") && "$INSTALL_GATEWAY" != "true" ]]; then
+	getOsData
+	if [[ "$CREATE_ORCHESTRATOR_GATEWAY" == "true" ]]; then
+		createSftGwConfigOrchestrator
+	else
+		# Determine which gateway config to create based on OS
+		if [[ "$DISTRIBUTION" == "rhel" && ( "$VERSION" == "8" || "$VERSION" == "9" ) ]] || [[ "$DISTRIBUTION" == "ubuntu" && ( "$VERSION" == "20.04" || "$VERSION" == "22.04" || "$VERSION" == "24.04" ) ]]; then
+			createSftGwConfigRDP
+		else
+			createSftGwConfig
+		fi
+	fi
+	INSTALLED_SOMETHING=true
+fi
+
 # If something needs to be installed, collect necessary information and update the package manager
 if [[ "$INSTALL_SERVER_TOOLS" == "true" ]] || [[ "$INSTALL_GATEWAY" == "true" ]] || [[ "$INSTALL_CLIENT_TOOLS" == "true" ]]; then
 	setRepoUrl
@@ -853,6 +934,16 @@ fi
 # Reload sshd if any changes were made that require it
 if [[ "$SSHD_NEEDS_RELOAD" = "true" ]]; then
     reloadSshd
+fi
+
+# Restart sftd if config was overwritten but no fresh installation was done
+if [[ "$SERVER_CONFIG_OVERWRITTEN" == "true" ]] && [[ "$INSTALL_SERVER_TOOLS" != "true" ]]; then
+	restartSftd
+fi
+
+# Restart sft-gatewayd if config was overwritten but no fresh installation was done
+if [[ "$GATEWAY_CONFIG_OVERWRITTEN" == "true" ]] && [[ "$INSTALL_GATEWAY" != "true" ]]; then
+	restartSftGatewayd
 fi
 
 if [[ "$INSTALLED_SOMETHING" == "false" ]];then

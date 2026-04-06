@@ -1,8 +1,8 @@
-# Universal Linux and BSD Installation Script
+# Universal Linux Installation Script
 
 ## Overview
 
-LinuxAndBsdOPAInstall.sh is intended to function as a universal install script for support Linux and BSD versions of the OPA Server Tools, OPA Gateway and RDP session Transcoder, and OPA Client Tools.  
+LinuxAndBsdOPAInstall.sh is intended to function as a universal install script for supported Linux versions of the OPA Server Tools, OPA Gateway and RDP session Transcoder, and OPA Client Tools.  
 
 **_These scripts are not supported by Okta, and no warranty is expressed or implied.  Please review and understand all scripts before using.  Use at your own risk._**
 
@@ -38,7 +38,7 @@ LinuxAndBsdOPAInstall.sh [options]
     -g                          Install OPA Gateway without providing a gateway setup token.
     -G gateway_setup_token      Install OPA Gateway with the provided gateway token.
     -W                          Force overwrite of gateway config (/etc/sft/sft-gatewayd.yaml) if it exists.
-    -O                          Create an Infrastructure Orchestrator gateway config (implies -g).
+    -O                          Create an Infrastructure Orchestrator gateway config (use with -g/-G to install).
     -c                          Install OPA Client Tools.
     -r                          Set installation branch, default is prod.
     -E                          Enable password authentication for SSH.
@@ -48,18 +48,20 @@ LinuxAndBsdOPAInstall.sh [options]
     -h                          Display this help message.
 ```
 
-## Tested Operating Systems
+## Supported Operating Systems
 
-* Ubuntu 18.04, 20.04, 22.04
-* Debian 9, 10, 11
-* Redhat 7, 8
-* CentOS 7, 8
-* Rocky Linux 8
-* AmazonLinux 2, 2022
-* SLES 12, 15
+* Ubuntu 18.04, 20.04, 22.04, 24.04
+* Debian 10, 11, 12
+* RHEL 8, 9
+* CentOS 8, 9
+* Rocky Linux 8, 9
+* Oracle Linux 8, 9
+* Alma Linux 8, 9
+* Amazon Linux 2, 2022, 2023
+* SLES 15
 * OpenSuse 15
-* Fedora 35
-* FreeBSD 12, 13
+
+**Note:** RHEL/CentOS 7 is no longer supported as OPA packages are not available for this version. Please upgrade to version 8 or later.
 
 ## Automation
 
