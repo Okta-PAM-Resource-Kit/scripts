@@ -363,6 +363,35 @@ function createSftGatewaySetupToken(){
 	fi
 }
 
+function checkTmpVarLogSameVolume(){
+	# Check if /tmp and /var/log are on the same filesystem
+	# Returns 0 if same volume, 1 if different volumes
+
+	local tmp_device=$(df /tmp 2>/dev/null | awk 'NR==2 {print $1}')
+	local varlog_device=$(df /var/log 2>/dev/null | awk 'NR==2 {print $1}')
+
+	if [ "$tmp_device" == "$varlog_device" ]; then
+		echo "/tmp and /var/log are on the same volume ($tmp_device)"
+		return 0
+	else
+		echo "/tmp and /var/log are on different volumes (/tmp: $tmp_device, /var/log: $varlog_device)"
+		return 1
+	fi
+}
+
+function setupGatewaySessionTmpStorage(){
+	# If /tmp and /var/log are on different volumes, create temp storage directory
+	# Returns the config line to add to sft-gatewayd.yaml, or empty string if not needed
+
+	if ! checkTmpVarLogSameVolume; then
+		echo "Creating /var/log/sft/sessions/tmp for session log temporary storage"
+		sudo mkdir -p /var/log/sft/sessions/tmp
+		echo "SessionLogTempStorageDirectory: /var/log/sft/sessions/tmp"
+	else
+		echo ""
+	fi
+}
+
 function createSftGwConfig(){
 	# Create an OPA Gateway configuration file for handling only SSH traffic.
 
@@ -382,6 +411,10 @@ function createSftGwConfig(){
 	fi
 
 	sudo mkdir -p /var/lib/sft-gatewayd
+
+	# Check if we need to configure alternate temp storage
+	SESSION_TMP_CONFIG=$(setupGatewaySessionTmpStorage)
+
 	sftgwcfg=$(cat <<-EOF
 	#Loglevel: debug
 
@@ -391,6 +424,12 @@ function createSftGwConfig(){
 	EOF
 
 	)
+
+	# Add session temp storage config if needed
+	if [ -n "$SESSION_TMP_CONFIG" ]; then
+		sftgwcfg="${sftgwcfg}${SESSION_TMP_CONFIG}"$'\n'
+	fi
+
 	echo -e "$sftgwcfg" | sudo tee /etc/sft/sft-gatewayd.yaml
 }
 
@@ -413,6 +452,10 @@ function createSftGwConfigRDP(){
 	fi
 
 	sudo mkdir -p /var/lib/sft-gatewayd
+
+	# Check if we need to configure alternate temp storage
+	SESSION_TMP_CONFIG=$(setupGatewaySessionTmpStorage)
+
 	sftgwcfg=$(cat <<-EOF
 	#Loglevel: debug
 
@@ -427,6 +470,12 @@ function createSftGwConfigRDP(){
 	EOF
 
 	)
+
+	# Add session temp storage config if needed
+	if [ -n "$SESSION_TMP_CONFIG" ]; then
+		sftgwcfg="${sftgwcfg}${SESSION_TMP_CONFIG}"$'\n'
+	fi
+
 	echo -e "$sftgwcfg" | sudo tee /etc/sft/sft-gatewayd.yaml
 }
 
@@ -449,6 +498,10 @@ function createSftGwConfigOrchestrator(){
 	fi
 
 	sudo mkdir -p /var/lib/sft-gatewayd
+
+	# Check if we need to configure alternate temp storage
+	SESSION_TMP_CONFIG=$(setupGatewaySessionTmpStorage)
+
 	sftgwcfg=$(cat <<-EOF
 	LogLevel: debug
 
@@ -462,6 +515,12 @@ function createSftGwConfigOrchestrator(){
 	EOF
 
 	)
+
+	# Add session temp storage config if needed
+	if [ -n "$SESSION_TMP_CONFIG" ]; then
+		sftgwcfg="${sftgwcfg}${SESSION_TMP_CONFIG}"$'\n'
+	fi
+
 	echo -e "$sftgwcfg" | sudo tee /etc/sft/sft-gatewayd.yaml
 }
 
