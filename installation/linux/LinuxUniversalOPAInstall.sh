@@ -197,12 +197,12 @@ function getServerName(){
 			INSTANCE_NAME=$(curl -s http://169.254.169.254/latest/meta-data/tags/instance/Name)
 		else
 			echo "Unable to retrieve Name tag, using hostname for server name in OPA."
-			INSTANCE_NAME=$HOSTNAME	
+			INSTANCE_NAME=$(hostname -s)
 		fi
 		echo "Instance not hosted in AWS, using hostname for server name in OPA."
 		echo "Instance Name: $INSTANCE_NAME"
 	else
-		INSTANCE_NAME=$HOSTNAME
+		INSTANCE_NAME=$(hostname -s)
 		echo "This host is not hosted in AWS"
 	fi
 	echo "Setting server name used in OPA to $INSTANCE_NAME."
