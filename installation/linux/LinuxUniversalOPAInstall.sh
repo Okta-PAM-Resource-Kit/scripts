@@ -371,10 +371,10 @@ function checkTmpVarLogSameVolume(){
 	local varlog_device=$(df /var/log 2>/dev/null | awk 'NR==2 {print $1}')
 
 	if [ "$tmp_device" == "$varlog_device" ]; then
-		echo "/tmp and /var/log are on the same volume ($tmp_device)"
+		echo "/tmp and /var/log are on the same volume ($tmp_device)" >&2
 		return 0
 	else
-		echo "/tmp and /var/log are on different volumes (/tmp: $tmp_device, /var/log: $varlog_device)"
+		echo "/tmp and /var/log are on different volumes (/tmp: $tmp_device, /var/log: $varlog_device)" >&2
 		return 1
 	fi
 }
@@ -384,7 +384,7 @@ function setupGatewaySessionTmpStorage(){
 	# Returns the config line to add to sft-gatewayd.yaml, or empty string if not needed
 
 	if ! checkTmpVarLogSameVolume; then
-		echo "Creating /var/log/sft/sessions/tmp for session log temporary storage"
+		echo "Creating /var/log/sft/sessions/tmp for session log temporary storage" >&2
 		sudo mkdir -p /var/log/sft/sessions/tmp
 		echo "SessionLogTempStorageDirectory: /var/log/sft/sessions/tmp"
 	else
