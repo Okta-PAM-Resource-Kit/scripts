@@ -87,6 +87,7 @@ GRANT ALL PRIVILEGES ON *.* TO 'dbadmin'@'%' WITH GRANT OPTION;
 -- Create the OPA service account
 CREATE USER 'orchestrator_integration_user'@'%' IDENTIFIED BY '$ORCH_PASS';
 GRANT SELECT ON mysql.user TO 'orchestrator_integration_user'@'%';
+GRANT UPDATE ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT SELECT ON mysql.role_edges TO 'orchestrator_integration_user'@'%';
 GRANT RELOAD ON *.* TO 'orchestrator_integration_user'@'%';
 GRANT CREATE USER ON *.* TO 'orchestrator_integration_user'@'%';
