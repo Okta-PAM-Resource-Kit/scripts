@@ -4,7 +4,7 @@
 
 LinuxUniversalOPAInstall.sh is intended to function as a universal install script for supported Linux versions of the OPA Server Tools, OPA Gateway and RDP session Transcoder, and OPA Client Tools.  
 
-**_These scripts are not supported by Okta, and no warranty is expressed or implied.  Please review and understand all scripts before using.  Use at your own risk._**
+**_These scripts are not supported by Okta, are experimental, and are not intended for production use.  No warranty is expressed or implied.  Please review and understand all scripts before using.  Use at your own risk._**
 
 ## Capabilities
 

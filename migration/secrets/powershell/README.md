@@ -1,7 +1,9 @@
 Powershell-Script to migrate creds to Okta Privileged Access Vault
+
+**_These scripts are not supported by Okta, are experimental, and are not intended for production use.  No warranty is expressed or implied.  Please review and understand all scripts before using.  Use at your own risk._**
+
 This is a basic script that demonstrates adding credentials to the OPA Vault using the sft command line tool. 
-Preferred way is to use an API endpoint to read credentials from the source and adding it to OPA vault.
-NOTE: The scripts provided here are as is and not officially supported by Okta. 
+Preferred way is to use an API endpoint to read credentials from the source and adding it to OPA vault. 
 
 
 Usage

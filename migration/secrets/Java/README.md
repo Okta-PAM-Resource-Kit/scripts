@@ -1,5 +1,7 @@
 # Java program to migrate credentials from Hashicorp vault to Okta vault has been developed using Springboot framework.
 
+**_These scripts are not supported by Okta, are experimental, and are not intended for production use.  No warranty is expressed or implied.  Please review and understand all scripts before using.  Use at your own risk._**
+
 Following Environment details are required to run this program.
 
 # Okta PAM URL
