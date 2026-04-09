@@ -3,6 +3,7 @@ set -e
 
 # LinuxOpaDbSetup.sh - Unified PostgreSQL and MySQL setup script
 # Supports auto-detection or explicit database selection
+# Supports Debian/Ubuntu (apt) and RHEL/CentOS/Rocky/Alma (yum/dnf)
 
 # Usage information
 usage() {
@@ -11,6 +12,10 @@ Usage: $0 [OPTIONS]
 
 Setup PostgreSQL or MySQL with OPA orchestrator account.
 The script will use sudo for privileged operations as needed.
+
+Supported distributions:
+  - Debian/Ubuntu (apt-get)
+  - RHEL/CentOS/Rocky/Alma Linux (yum/dnf)
 
 OPTIONS:
     -p                    Install and configure PostgreSQL
@@ -34,14 +39,60 @@ EOF
     exit 1
 }
 
+# Detect Linux distribution type
+detect_distro() {
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        echo "$ID"
+    elif [[ -f /etc/redhat-release ]]; then
+        echo "rhel"
+    elif [[ -f /etc/debian_version ]]; then
+        echo "debian"
+    else
+        echo "unknown"
+    fi
+}
+
+# Detect package manager
+detect_package_manager() {
+    local distro=$(detect_distro)
+
+    case "$distro" in
+        ubuntu|debian)
+            echo "apt"
+            ;;
+        rhel|centos|rocky|almalinux|fedora|ol)
+            if command -v dnf >/dev/null 2>&1; then
+                echo "dnf"
+            else
+                echo "yum"
+            fi
+            ;;
+        *)
+            echo "unknown"
+            ;;
+    esac
+}
+
 # Detect which database is installed
 detect_database() {
     local detected=""
 
-    if command -v psql >/dev/null 2>&1 && systemctl is-active --quiet postgresql 2>/dev/null; then
-        detected="postgres"
-    elif command -v mysql >/dev/null 2>&1 && systemctl is-active --quiet mysql 2>/dev/null; then
-        detected="mysql"
+    # Check PostgreSQL
+    if command -v psql >/dev/null 2>&1; then
+        if systemctl is-active --quiet postgresql 2>/dev/null || \
+           systemctl is-active --quiet postgresql-*.service 2>/dev/null; then
+            detected="postgres"
+        fi
+    fi
+
+    # Check MySQL/MariaDB
+    if [[ -z "$detected" ]] && command -v mysql >/dev/null 2>&1; then
+        if systemctl is-active --quiet mysql 2>/dev/null || \
+           systemctl is-active --quiet mysqld 2>/dev/null || \
+           systemctl is-active --quiet mariadb 2>/dev/null; then
+            detected="mysql"
+        fi
     fi
 
     echo "$detected"
@@ -60,26 +111,108 @@ generate_passwords() {
 
 # Install and configure MySQL
 install_mysql() {
-    echo "Installing MySQL..."
-    sudo apt-get update
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-server
+    local pkg_mgr=$(detect_package_manager)
+    echo "Installing MySQL (using $pkg_mgr)..."
+
+    case "$pkg_mgr" in
+        apt)
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-server
+            local config_file="/etc/mysql/mysql.conf.d/mysqld.cnf"
+            local service_name="mysql"
+            ;;
+        dnf|yum)
+            sudo $pkg_mgr install -y mysql-server
+            local config_file="/etc/my.cnf.d/mysql-server.cnf"
+            local service_name="mysqld"
+
+            # Enable and start service
+            sudo systemctl enable $service_name
+            sudo systemctl start $service_name
+            ;;
+        *)
+            echo "ERROR: Unsupported package manager: $pkg_mgr"
+            exit 1
+            ;;
+    esac
 
     # Configure MySQL to listen on all interfaces
-    sudo sed -i "s/bind-address.*/bind-address = 0.0.0.0/" /etc/mysql/mysql.conf.d/mysqld.cnf
-    sudo systemctl restart mysql
+    if [[ -f "$config_file" ]]; then
+        if grep -q "^bind-address" "$config_file"; then
+            sudo sed -i "s/^bind-address.*/bind-address = 0.0.0.0/" "$config_file"
+        else
+            echo "bind-address = 0.0.0.0" | sudo tee -a "$config_file" >/dev/null
+        fi
+    else
+        echo "[mysqld]" | sudo tee "$config_file" >/dev/null
+        echo "bind-address = 0.0.0.0" | sudo tee -a "$config_file" >/dev/null
+    fi
+
+    sudo systemctl restart $service_name
+    echo "MySQL installation and configuration complete."
 }
 
 # Install and configure PostgreSQL
 install_postgres() {
-    echo "Installing PostgreSQL..."
-    sudo apt-get update
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql postgresql-contrib
+    local pkg_mgr=$(detect_package_manager)
+    echo "Installing PostgreSQL (using $pkg_mgr)..."
 
-    # Configure PostgreSQL to listen on all interfaces
-    sudo bash -c "echo \"listen_addresses = '*'\" >> /etc/postgresql/16/main/postgresql.conf"
-    sudo bash -c "echo \"host    all             all             0.0.0.0/0               md5\" >> /etc/postgresql/16/main/pg_hba.conf"
+    case "$pkg_mgr" in
+        apt)
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql postgresql-contrib
 
-    sudo systemctl restart postgresql
+            # Find PostgreSQL version directory
+            local pg_version=$(ls /etc/postgresql/ | sort -V | tail -1)
+            local config_dir="/etc/postgresql/$pg_version/main"
+            local service_name="postgresql"
+            ;;
+        dnf|yum)
+            sudo $pkg_mgr install -y postgresql-server postgresql-contrib
+
+            # Initialize database if not already initialized
+            if [[ ! -d /var/lib/pgsql/data/base ]]; then
+                echo "Initializing PostgreSQL database..."
+                sudo postgresql-setup --initdb || sudo /usr/bin/postgresql-setup initdb
+            fi
+
+            # Find config directory
+            local pg_version=$(psql --version | awk '{print $3}' | cut -d. -f1)
+            if [[ -d "/var/lib/pgsql/$pg_version/data" ]]; then
+                local config_dir="/var/lib/pgsql/$pg_version/data"
+            else
+                local config_dir="/var/lib/pgsql/data"
+            fi
+            local service_name="postgresql"
+
+            # Enable and start service
+            sudo systemctl enable $service_name
+            sudo systemctl start $service_name
+            ;;
+        *)
+            echo "ERROR: Unsupported package manager: $pkg_mgr"
+            exit 1
+            ;;
+    esac
+
+    echo "Configuring PostgreSQL to listen on all interfaces..."
+
+    # Configure listen_addresses
+    local conf_file="$config_dir/postgresql.conf"
+    if sudo grep -q "^listen_addresses" "$conf_file"; then
+        sudo sed -i "s/^listen_addresses.*/listen_addresses = '*'/" "$conf_file"
+    else
+        echo "listen_addresses = '*'" | sudo tee -a "$conf_file" >/dev/null
+    fi
+
+    # Configure pg_hba.conf for remote access
+    local hba_file="$config_dir/pg_hba.conf"
+    if ! sudo grep -q "0.0.0.0/0" "$hba_file"; then
+        echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a "$hba_file" >/dev/null
+    fi
+
+    sudo systemctl restart $service_name
+    echo "PostgreSQL installation and configuration complete."
 }
 
 # Create MySQL users

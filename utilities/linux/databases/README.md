@@ -8,7 +8,8 @@
 
 ## Key Features
 
-- **Auto-detection**: Automatically detects installed database (PostgreSQL or MySQL)
+- **Multi-distribution support**: Works on Debian/Ubuntu (apt) and RHEL/CentOS/Rocky/Alma Linux (yum/dnf)
+- **Auto-detection**: Automatically detects installed database (PostgreSQL or MySQL/MariaDB)
 - **Flexible installation**: Explicit database selection with `-p` (PostgreSQL) or `-m` (MySQL)
 - **Orchestrator account**: Creates `orchestrator_integration_user` with configurable privileges
 - **Example users**: Optional creation of 5 example user accounts with different privilege levels
@@ -16,12 +17,27 @@
 - **Secure credentials**: Generates random passwords and stores them in `/root/`
 - **Network ready**: Configures databases to accept remote connections
 
+## Supported Operating Systems
+
+### Debian-based
+- Ubuntu 20.04, 22.04, 24.04
+- Debian 10, 11, 12
+
+### RPM-based
+- RHEL 8, 9
+- CentOS 8, 9 (Stream)
+- Rocky Linux 8, 9
+- AlmaLinux 8, 9
+- Oracle Linux 8, 9
+- Fedora (recent versions)
+
 ## Prerequisites
 
-- Ubuntu/Debian Linux system
+- Supported Linux distribution (see above)
 - Root or sudo access
 - `openssl` for password generation
 - Internet access for package installation
+- `systemd` for service management
 
 ## Usage
 
@@ -152,24 +168,41 @@ The script is designed to be re-run safely:
 
 ## What the Script Does
 
-1. **Database Installation** (if not already installed)
-   - Installs PostgreSQL or MySQL using apt-get
-   - Configures for remote access
+1. **Distribution Detection**
+   - Automatically detects Linux distribution (Debian/Ubuntu vs RHEL/CentOS/Rocky/Alma)
+   - Selects appropriate package manager (apt, yum, or dnf)
+   - Adapts configuration paths based on distribution
 
-2. **Orchestrator Account Setup**
+2. **Database Installation** (if not already installed)
+   - **Debian/Ubuntu**: Installs using `apt-get`, service name `mysql`/`postgresql`
+   - **RHEL/CentOS/Rocky/Alma**: Installs using `yum`/`dnf`, runs PostgreSQL `initdb` if needed
+   - Configures for remote access with distribution-specific config paths
+
+3. **Orchestrator Account Setup**
    - Creates or updates `orchestrator_integration_user`
    - Grants appropriate privileges based on `-s` flag
    - Sets secure random password on creation
 
-3. **Example Users** (if `-e` flag is used)
+4. **Example Users** (if `-e` flag is used)
    - Creates 5 example accounts with different privilege levels
    - Assigns unique random passwords
    - Configures appropriate database permissions
 
-4. **Credential Management**
+5. **Credential Management**
    - Generates secure random passwords
    - Saves credentials to `/root/` with restricted permissions
    - Backs up existing credential files
+
+## Distribution-Specific Details
+
+### PostgreSQL
+- **Debian/Ubuntu**: Config in `/etc/postgresql/[version]/main/`
+- **RHEL/Rocky/Alma**: Config in `/var/lib/pgsql/data/` or `/var/lib/pgsql/[version]/data/`
+- **RPM systems**: Requires database initialization on first install
+
+### MySQL
+- **Debian/Ubuntu**: Service name `mysql`, config in `/etc/mysql/mysql.conf.d/mysqld.cnf`
+- **RHEL/Rocky/Alma**: Service name `mysqld`, config in `/etc/my.cnf.d/mysql-server.cnf`
 
 ## Troubleshooting
 
@@ -179,13 +212,23 @@ The script is designed to be re-run safely:
 ### Permission denied errors
 - Run with `sudo` or as root user
 
+### Unsupported distribution error
+- Ensure you're running on a supported Debian or RPM-based distribution
+- Check `/etc/os-release` for distribution information
+
 ### Service not active
-- Check service status: `systemctl status postgresql` or `systemctl status mysql`
-- Restart service: `sudo systemctl restart postgresql` or `sudo systemctl restart mysql`
+**Debian/Ubuntu:**
+- PostgreSQL: `systemctl status postgresql`
+- MySQL: `systemctl status mysql`
+
+**RHEL/Rocky/Alma:**
+- PostgreSQL: `systemctl status postgresql`
+- MySQL: `systemctl status mysqld`
 
 ### Cannot connect remotely
 - Verify firewall rules allow database ports (5432 for PostgreSQL, 3306 for MySQL)
-- Check database configuration files for network settings
+- **RPM-based systems**: Configure firewall with `firewall-cmd --add-service=postgresql --permanent` or `firewall-cmd --add-port=3306/tcp --permanent`
+- Check database configuration files for network settings (paths vary by distribution)
 
 ## Security Considerations
 
@@ -198,7 +241,7 @@ The script is designed to be re-run safely:
 ## Download and Run
 
 ```bash
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/databases/LinuxOpaDbSetup.sh
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/linux/databases/LinuxOpaDbSetup.sh
 chmod +x LinuxOpaDbSetup.sh
 ./LinuxOpaDbSetup.sh -p -e  # Example: PostgreSQL with example users
 ```
@@ -209,5 +252,5 @@ Shad Lutz
 
 ## Related Scripts
 
-- [Linux Universal OPA Install](../../installation/linux/README.md) - Agent installation
-- [Linux AD Join](../linux/ad_domain_join/README.md) - Active Directory integration
+- [Linux Universal OPA Install](../../../installation/linux/README.md) - Agent installation
+- [Linux AD Join](../ad_domain_join/README.md) - Active Directory integration
