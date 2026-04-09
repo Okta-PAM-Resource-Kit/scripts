@@ -83,6 +83,7 @@ install_postgres() {
 create_mysql_users() {
     local orch_superuser=$1
     echo "Creating MySQL users..."
+    local new_users=false
 
     # Determine orchestrator privileges based on flag
     if [[ "$orch_superuser" == "true" ]]; then
@@ -91,24 +92,40 @@ create_mysql_users() {
         echo "Granting limited privileges to orchestrator (can create users and manage target database)"
     fi
 
-    sudo mysql -u root <<SQL
--- Create admin service account (create if not exists, then set password)
-CREATE USER IF NOT EXISTS 'dbadmin'@'%';
-ALTER USER 'dbadmin'@'%' IDENTIFIED BY '$ADMIN_PASS';
+    # Check if dbadmin exists
+    local dbadmin_exists=$(sudo mysql -u root -sse "SELECT EXISTS(SELECT 1 FROM mysql.user WHERE user = 'dbadmin' AND host = '%')")
+
+    if [[ "$dbadmin_exists" == "1" ]]; then
+        echo "dbadmin already exists, skipping..."
+    else
+        echo "Creating dbadmin..."
+        new_users=true
+        sudo mysql -u root <<SQL
+CREATE USER 'dbadmin'@'%' IDENTIFIED BY '$ADMIN_PASS';
 GRANT ALL PRIVILEGES ON *.* TO 'dbadmin'@'%' WITH GRANT OPTION;
-
--- Create the OPA service account (create if not exists, then set password)
-CREATE USER IF NOT EXISTS 'orchestrator_integration_user'@'%';
-ALTER USER 'orchestrator_integration_user'@'%' IDENTIFIED BY '$ORCH_PASS';
 SQL
+    fi
 
+    # Handle orchestrator_integration_user - always update privileges, set password only on creation
+    local orch_exists=$(sudo mysql -u root -sse "SELECT EXISTS(SELECT 1 FROM mysql.user WHERE user = 'orchestrator_integration_user' AND host = '%')")
+
+    if [[ "$orch_exists" == "1" ]]; then
+        echo "orchestrator_integration_user exists, updating privileges only..."
+    else
+        echo "Creating orchestrator_integration_user..."
+        new_users=true
+        sudo mysql -u root <<SQL
+CREATE USER 'orchestrator_integration_user'@'%' IDENTIFIED BY '$ORCH_PASS';
+SQL
+    fi
+
+    # Grant/update orchestrator privileges
     if [[ "$orch_superuser" == "true" ]]; then
-        # Grant full admin privileges (similar to dbadmin)
         sudo mysql -u root <<SQL
 GRANT ALL PRIVILEGES ON *.* TO 'orchestrator_integration_user'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
 SQL
     else
-        # Grant limited privileges for user management and target database access
         sudo mysql -u root <<SQL
 GRANT SELECT ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT UPDATE ON mysql.user TO 'orchestrator_integration_user'@'%';
@@ -117,40 +134,84 @@ GRANT RELOAD ON *.* TO 'orchestrator_integration_user'@'%';
 GRANT CREATE USER ON *.* TO 'orchestrator_integration_user'@'%';
 GRANT CREATE ROLE ON *.* TO 'orchestrator_integration_user'@'%';
 GRANT ALL PRIVILEGES ON \`<target_db>\`.* TO 'orchestrator_integration_user'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+SQL
+    fi
+
+    # Create example users only if they don't exist
+    local app_admin_exists=$(sudo mysql -u root -sse "SELECT EXISTS(SELECT 1 FROM mysql.user WHERE user = 'app_admin' AND host = '%')")
+    if [[ "$app_admin_exists" == "1" ]]; then
+        echo "app_admin already exists, skipping..."
+    else
+        echo "Creating app_admin..."
+        new_users=true
+        sudo mysql -u root <<SQL
+CREATE USER 'app_admin'@'%' IDENTIFIED BY '$USER1_PASS';
+GRANT ALL PRIVILEGES ON *.* TO 'app_admin'@'%';
+SQL
+    fi
+
+    local app_readwrite_exists=$(sudo mysql -u root -sse "SELECT EXISTS(SELECT 1 FROM mysql.user WHERE user = 'app_readwrite' AND host = '%')")
+    if [[ "$app_readwrite_exists" == "1" ]]; then
+        echo "app_readwrite already exists, skipping..."
+    else
+        echo "Creating app_readwrite..."
+        new_users=true
+        sudo mysql -u root <<SQL
+CREATE USER 'app_readwrite'@'%' IDENTIFIED BY '$USER2_PASS';
+GRANT SELECT, INSERT, UPDATE, DELETE ON *.* TO 'app_readwrite'@'%';
+SQL
+    fi
+
+    local app_readonly_exists=$(sudo mysql -u root -sse "SELECT EXISTS(SELECT 1 FROM mysql.user WHERE user = 'app_readonly' AND host = '%')")
+    if [[ "$app_readonly_exists" == "1" ]]; then
+        echo "app_readonly already exists, skipping..."
+    else
+        echo "Creating app_readonly..."
+        new_users=true
+        sudo mysql -u root <<SQL
+CREATE USER 'app_readonly'@'%' IDENTIFIED BY '$USER3_PASS';
+GRANT SELECT ON *.* TO 'app_readonly'@'%';
+SQL
+    fi
+
+    local report_user_exists=$(sudo mysql -u root -sse "SELECT EXISTS(SELECT 1 FROM mysql.user WHERE user = 'report_user' AND host = '%')")
+    if [[ "$report_user_exists" == "1" ]]; then
+        echo "report_user already exists, skipping..."
+    else
+        echo "Creating report_user..."
+        new_users=true
+        sudo mysql -u root <<SQL
+CREATE USER 'report_user'@'%' IDENTIFIED BY '$USER4_PASS';
+GRANT SELECT, SHOW VIEW ON *.* TO 'report_user'@'%';
+SQL
+    fi
+
+    local backup_user_exists=$(sudo mysql -u root -sse "SELECT EXISTS(SELECT 1 FROM mysql.user WHERE user = 'backup_user' AND host = '%')")
+    if [[ "$backup_user_exists" == "1" ]]; then
+        echo "backup_user already exists, skipping..."
+    else
+        echo "Creating backup_user..."
+        new_users=true
+        sudo mysql -u root <<SQL
+CREATE USER 'backup_user'@'%' IDENTIFIED BY '$USER5_PASS';
+GRANT SELECT, LOCK TABLES, SHOW VIEW, EVENT, TRIGGER ON *.* TO 'backup_user'@'%';
 SQL
     fi
 
     sudo mysql -u root <<SQL
-
--- Create example users with various roles (create if not exists, then set password and privileges)
-CREATE USER IF NOT EXISTS 'app_admin'@'%';
-ALTER USER 'app_admin'@'%' IDENTIFIED BY '$USER1_PASS';
-GRANT ALL PRIVILEGES ON *.* TO 'app_admin'@'%';
-
-CREATE USER IF NOT EXISTS 'app_readwrite'@'%';
-ALTER USER 'app_readwrite'@'%' IDENTIFIED BY '$USER2_PASS';
-GRANT SELECT, INSERT, UPDATE, DELETE ON *.* TO 'app_readwrite'@'%';
-
-CREATE USER IF NOT EXISTS 'app_readonly'@'%';
-ALTER USER 'app_readonly'@'%' IDENTIFIED BY '$USER3_PASS';
-GRANT SELECT ON *.* TO 'app_readonly'@'%';
-
-CREATE USER IF NOT EXISTS 'report_user'@'%';
-ALTER USER 'report_user'@'%' IDENTIFIED BY '$USER4_PASS';
-GRANT SELECT, SHOW VIEW ON *.* TO 'report_user'@'%';
-
-CREATE USER IF NOT EXISTS 'backup_user'@'%';
-ALTER USER 'backup_user'@'%' IDENTIFIED BY '$USER5_PASS';
-GRANT SELECT, LOCK TABLES, SHOW VIEW, EVENT, TRIGGER ON *.* TO 'backup_user'@'%';
-
 FLUSH PRIVILEGES;
 SQL
+
+    # Return whether new users were created
+    echo "$new_users"
 }
 
 # Create PostgreSQL users
 create_postgres_users() {
     local orch_superuser=$1
     echo "Creating PostgreSQL users..."
+    local new_users=false
 
     # Determine orchestrator privileges based on flag
     local orch_privileges
@@ -162,27 +223,32 @@ create_postgres_users() {
         echo "Granting CREATEROLE to orchestrator (can change non-superuser passwords only)"
     fi
 
-    sudo -u postgres psql <<SQL
--- Create or alter admin service account with superuser privileges
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'dbadmin') THEN
-    CREATE USER dbadmin WITH PASSWORD '$ADMIN_PASS' SUPERUSER CREATEDB CREATEROLE;
-  ELSE
-    ALTER USER dbadmin WITH PASSWORD '$ADMIN_PASS' SUPERUSER CREATEDB CREATEROLE;
-  END IF;
-END \$\$;
-
--- Create or alter OPA orchestrator user
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'orchestrator_integration_user') THEN
-    CREATE USER orchestrator_integration_user WITH PASSWORD '$ORCH_PASS' $orch_privileges;
-  ELSE
-    ALTER USER orchestrator_integration_user WITH PASSWORD '$ORCH_PASS' $orch_privileges;
-  END IF;
-END \$\$;
+    # Check and create dbadmin if needed
+    local dbadmin_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='dbadmin'")
+    if [[ "$dbadmin_exists" == "1" ]]; then
+        echo "dbadmin already exists, skipping..."
+    else
+        echo "Creating dbadmin..."
+        new_users=true
+        sudo -u postgres psql <<SQL
+CREATE USER dbadmin WITH PASSWORD '$ADMIN_PASS' SUPERUSER CREATEDB CREATEROLE;
 SQL
+    fi
+
+    # Handle orchestrator_integration_user - always update privileges, set password only on creation
+    local orch_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='orchestrator_integration_user'")
+    if [[ "$orch_exists" == "1" ]]; then
+        echo "orchestrator_integration_user exists, updating privileges only..."
+        sudo -u postgres psql <<SQL
+ALTER USER orchestrator_integration_user WITH $orch_privileges;
+SQL
+    else
+        echo "Creating orchestrator_integration_user..."
+        new_users=true
+        sudo -u postgres psql <<SQL
+CREATE USER orchestrator_integration_user WITH PASSWORD '$ORCH_PASS' $orch_privileges;
+SQL
+    fi
 
     # If orchestrator is NOT superuser, grant specific privileges
     # (SUPERUSER already has all these privileges, so they're redundant in that case)
@@ -203,58 +269,64 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 SQL
     fi
 
-    # Create example users
-    sudo -u postgres psql <<SQL
-
--- Create or alter example users with various roles
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_admin') THEN
-    CREATE USER app_admin WITH PASSWORD '$USER1_PASS' CREATEDB SUPERUSER;
-  ELSE
-    ALTER USER app_admin WITH PASSWORD '$USER1_PASS' CREATEDB SUPERUSER;
-  END IF;
-END \$\$;
-
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_readwrite') THEN
-    CREATE USER app_readwrite WITH PASSWORD '$USER2_PASS';
-  ELSE
-    ALTER USER app_readwrite WITH PASSWORD '$USER2_PASS';
-  END IF;
-END \$\$;
-GRANT ALL PRIVILEGES ON DATABASE postgres TO app_readwrite;
-
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_readonly') THEN
-    CREATE USER app_readonly WITH PASSWORD '$USER3_PASS';
-  ELSE
-    ALTER USER app_readonly WITH PASSWORD '$USER3_PASS';
-  END IF;
-END \$\$;
-GRANT CONNECT ON DATABASE postgres TO app_readonly;
-
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'report_user') THEN
-    CREATE USER report_user WITH PASSWORD '$USER4_PASS';
-  ELSE
-    ALTER USER report_user WITH PASSWORD '$USER4_PASS';
-  END IF;
-END \$\$;
-GRANT CONNECT ON DATABASE postgres TO report_user;
-
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'backup_user') THEN
-    CREATE USER backup_user WITH PASSWORD '$USER5_PASS' REPLICATION;
-  ELSE
-    ALTER USER backup_user WITH PASSWORD '$USER5_PASS' REPLICATION;
-  END IF;
-END \$\$;
+    # Create example users only if they don't exist
+    local app_admin_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='app_admin'")
+    if [[ "$app_admin_exists" == "1" ]]; then
+        echo "app_admin already exists, skipping..."
+    else
+        echo "Creating app_admin..."
+        new_users=true
+        sudo -u postgres psql <<SQL
+CREATE USER app_admin WITH PASSWORD '$USER1_PASS' CREATEDB SUPERUSER;
 SQL
+    fi
+
+    local app_readwrite_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='app_readwrite'")
+    if [[ "$app_readwrite_exists" == "1" ]]; then
+        echo "app_readwrite already exists, skipping..."
+    else
+        echo "Creating app_readwrite..."
+        new_users=true
+        sudo -u postgres psql <<SQL
+CREATE USER app_readwrite WITH PASSWORD '$USER2_PASS';
+GRANT ALL PRIVILEGES ON DATABASE postgres TO app_readwrite;
+SQL
+    fi
+
+    local app_readonly_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='app_readonly'")
+    if [[ "$app_readonly_exists" == "1" ]]; then
+        echo "app_readonly already exists, skipping..."
+    else
+        echo "Creating app_readonly..."
+        new_users=true
+        sudo -u postgres psql <<SQL
+CREATE USER app_readonly WITH PASSWORD '$USER3_PASS';
+GRANT CONNECT ON DATABASE postgres TO app_readonly;
+SQL
+    fi
+
+    local report_user_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='report_user'")
+    if [[ "$report_user_exists" == "1" ]]; then
+        echo "report_user already exists, skipping..."
+    else
+        echo "Creating report_user..."
+        new_users=true
+        sudo -u postgres psql <<SQL
+CREATE USER report_user WITH PASSWORD '$USER4_PASS';
+GRANT CONNECT ON DATABASE postgres TO report_user;
+SQL
+    fi
+
+    local backup_user_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='backup_user'")
+    if [[ "$backup_user_exists" == "1" ]]; then
+        echo "backup_user already exists, skipping..."
+    else
+        echo "Creating backup_user..."
+        new_users=true
+        sudo -u postgres psql <<SQL
+CREATE USER backup_user WITH PASSWORD '$USER5_PASS' REPLICATION;
+SQL
+    fi
 
     # If orchestrator is NOT superuser, grant ADMIN option on all non-superuser roles
     # This allows password changes on non-superuser accounts (PostgreSQL 16+ requirement)
@@ -279,6 +351,9 @@ END
 \$\$;
 SQL
     fi
+
+    # Return whether new users were created
+    echo "$new_users"
 }
 
 # Write credentials file
@@ -382,8 +457,12 @@ main() {
             else
                 echo "PostgreSQL already installed. Skipping installation."
             fi
-            create_postgres_users "$orchestrator_superuser"
-            write_credentials "postgresql"
+            local new_users=$(create_postgres_users "$orchestrator_superuser")
+            if [[ "$new_users" == "true" ]]; then
+                write_credentials "postgresql"
+            else
+                echo "No new PostgreSQL users created. Credentials file not modified."
+            fi
             ;;
         mysql)
             # Check if already installed
@@ -392,8 +471,12 @@ main() {
             else
                 echo "MySQL already installed. Skipping installation."
             fi
-            create_mysql_users "$orchestrator_superuser"
-            write_credentials "mysql"
+            local new_users=$(create_mysql_users "$orchestrator_superuser")
+            if [[ "$new_users" == "true" ]]; then
+                write_credentials "mysql"
+            else
+                echo "No new MySQL users created. Credentials file not modified."
+            fi
             ;;
         *)
             echo "ERROR: Unknown database engine: $db_engine"
