@@ -121,8 +121,8 @@ create_postgres_users() {
 -- Create admin service account with superuser privileges
 CREATE USER dbadmin WITH PASSWORD '$ADMIN_PASS' SUPERUSER CREATEDB CREATEROLE;
 
--- Create OPA orchestrator user
-CREATE USER orchestrator_integration_user WITH PASSWORD '$ORCH_PASS' CREATEROLE;
+-- Create OPA orchestrator user with SUPERUSER to allow password changes on all accounts
+CREATE USER orchestrator_integration_user WITH PASSWORD '$ORCH_PASS' SUPERUSER;
 GRANT CONNECT ON DATABASE postgres TO orchestrator_integration_user;
 GRANT pg_signal_backend TO orchestrator_integration_user;
 GRANT USAGE ON SCHEMA public TO orchestrator_integration_user;
