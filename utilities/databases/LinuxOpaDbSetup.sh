@@ -13,17 +13,20 @@ Setup PostgreSQL or MySQL with OPA-ready user accounts.
 The script will use sudo for privileged operations as needed.
 
 OPTIONS:
-    --postgres          Install and configure PostgreSQL
-    --mysql             Install and configure MySQL
-    --detect-only       Detect installed database without setup
-    -h, --help          Show this help message
+    --postgres                    Install and configure PostgreSQL
+    --mysql                       Install and configure MySQL
+    --orchestrator-superuser      Grant SUPERUSER to orchestrator (allows password changes on all accounts)
+                                  Default: orchestrator can only change non-superuser passwords
+    --detect-only                 Detect installed database without setup
+    -h, --help                    Show this help message
 
 If no option is specified, the script will auto-detect the installed database.
 
 Examples:
-    $0 --postgres       # Install PostgreSQL
-    $0 --mysql          # Install MySQL
-    $0                  # Auto-detect and configure
+    $0 --postgres                        # Install PostgreSQL with default orchestrator privileges
+    $0 --postgres --orchestrator-superuser  # Install PostgreSQL with orchestrator as superuser
+    $0 --mysql                           # Install MySQL
+    $0                                   # Auto-detect and configure
 EOF
     exit 1
 }
@@ -78,14 +81,35 @@ install_postgres() {
 
 # Create MySQL users
 create_mysql_users() {
+    local orch_superuser=$1
     echo "Creating MySQL users..."
+
+    # Determine orchestrator privileges based on flag
+    if [[ "$orch_superuser" == "true" ]]; then
+        echo "Granting full admin privileges to orchestrator (can manage all users and databases)"
+    else
+        echo "Granting limited privileges to orchestrator (can create users and manage target database)"
+    fi
+
     sudo mysql -u root <<SQL
--- Create admin service account
-CREATE USER IF NOT EXISTS 'dbadmin'@'%' IDENTIFIED BY '$ADMIN_PASS';
+-- Create admin service account (create if not exists, then set password)
+CREATE USER IF NOT EXISTS 'dbadmin'@'%';
+ALTER USER 'dbadmin'@'%' IDENTIFIED BY '$ADMIN_PASS';
 GRANT ALL PRIVILEGES ON *.* TO 'dbadmin'@'%' WITH GRANT OPTION;
 
--- Create the OPA service account
-CREATE USER 'orchestrator_integration_user'@'%' IDENTIFIED BY '$ORCH_PASS';
+-- Create the OPA service account (create if not exists, then set password)
+CREATE USER IF NOT EXISTS 'orchestrator_integration_user'@'%';
+ALTER USER 'orchestrator_integration_user'@'%' IDENTIFIED BY '$ORCH_PASS';
+SQL
+
+    if [[ "$orch_superuser" == "true" ]]; then
+        # Grant full admin privileges (similar to dbadmin)
+        sudo mysql -u root <<SQL
+GRANT ALL PRIVILEGES ON *.* TO 'orchestrator_integration_user'@'%' WITH GRANT OPTION;
+SQL
+    else
+        # Grant limited privileges for user management and target database access
+        sudo mysql -u root <<SQL
 GRANT SELECT ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT UPDATE ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT SELECT ON mysql.role_edges TO 'orchestrator_integration_user'@'%';
@@ -93,21 +117,30 @@ GRANT RELOAD ON *.* TO 'orchestrator_integration_user'@'%';
 GRANT CREATE USER ON *.* TO 'orchestrator_integration_user'@'%';
 GRANT CREATE ROLE ON *.* TO 'orchestrator_integration_user'@'%';
 GRANT ALL PRIVILEGES ON \`<target_db>\`.* TO 'orchestrator_integration_user'@'%' WITH GRANT OPTION;
+SQL
+    fi
 
--- Create example users with various roles
-CREATE USER IF NOT EXISTS 'app_admin'@'%' IDENTIFIED BY '$USER1_PASS';
+    sudo mysql -u root <<SQL
+
+-- Create example users with various roles (create if not exists, then set password and privileges)
+CREATE USER IF NOT EXISTS 'app_admin'@'%';
+ALTER USER 'app_admin'@'%' IDENTIFIED BY '$USER1_PASS';
 GRANT ALL PRIVILEGES ON *.* TO 'app_admin'@'%';
 
-CREATE USER IF NOT EXISTS 'app_readwrite'@'%' IDENTIFIED BY '$USER2_PASS';
+CREATE USER IF NOT EXISTS 'app_readwrite'@'%';
+ALTER USER 'app_readwrite'@'%' IDENTIFIED BY '$USER2_PASS';
 GRANT SELECT, INSERT, UPDATE, DELETE ON *.* TO 'app_readwrite'@'%';
 
-CREATE USER IF NOT EXISTS 'app_readonly'@'%' IDENTIFIED BY '$USER3_PASS';
+CREATE USER IF NOT EXISTS 'app_readonly'@'%';
+ALTER USER 'app_readonly'@'%' IDENTIFIED BY '$USER3_PASS';
 GRANT SELECT ON *.* TO 'app_readonly'@'%';
 
-CREATE USER IF NOT EXISTS 'report_user'@'%' IDENTIFIED BY '$USER4_PASS';
+CREATE USER IF NOT EXISTS 'report_user'@'%';
+ALTER USER 'report_user'@'%' IDENTIFIED BY '$USER4_PASS';
 GRANT SELECT, SHOW VIEW ON *.* TO 'report_user'@'%';
 
-CREATE USER IF NOT EXISTS 'backup_user'@'%' IDENTIFIED BY '$USER5_PASS';
+CREATE USER IF NOT EXISTS 'backup_user'@'%';
+ALTER USER 'backup_user'@'%' IDENTIFIED BY '$USER5_PASS';
 GRANT SELECT, LOCK TABLES, SHOW VIEW, EVENT, TRIGGER ON *.* TO 'backup_user'@'%';
 
 FLUSH PRIVILEGES;
@@ -116,13 +149,46 @@ SQL
 
 # Create PostgreSQL users
 create_postgres_users() {
+    local orch_superuser=$1
     echo "Creating PostgreSQL users..."
-    sudo -u postgres psql <<SQL
--- Create admin service account with superuser privileges
-CREATE USER dbadmin WITH PASSWORD '$ADMIN_PASS' SUPERUSER CREATEDB CREATEROLE;
 
--- Create OPA orchestrator user with SUPERUSER to allow password changes on all accounts
-CREATE USER orchestrator_integration_user WITH PASSWORD '$ORCH_PASS' SUPERUSER;
+    # Determine orchestrator privileges based on flag
+    local orch_privileges
+    if [[ "$orch_superuser" == "true" ]]; then
+        orch_privileges="SUPERUSER"
+        echo "Granting SUPERUSER to orchestrator (can change all passwords including superusers)"
+    else
+        orch_privileges="CREATEROLE"
+        echo "Granting CREATEROLE to orchestrator (can change non-superuser passwords only)"
+    fi
+
+    sudo -u postgres psql <<SQL
+-- Create or alter admin service account with superuser privileges
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'dbadmin') THEN
+    CREATE USER dbadmin WITH PASSWORD '$ADMIN_PASS' SUPERUSER CREATEDB CREATEROLE;
+  ELSE
+    ALTER USER dbadmin WITH PASSWORD '$ADMIN_PASS' SUPERUSER CREATEDB CREATEROLE;
+  END IF;
+END \$\$;
+
+-- Create or alter OPA orchestrator user
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'orchestrator_integration_user') THEN
+    CREATE USER orchestrator_integration_user WITH PASSWORD '$ORCH_PASS' $orch_privileges;
+  ELSE
+    ALTER USER orchestrator_integration_user WITH PASSWORD '$ORCH_PASS' $orch_privileges;
+  END IF;
+END \$\$;
+SQL
+
+    # If orchestrator is NOT superuser, grant specific privileges
+    # (SUPERUSER already has all these privileges, so they're redundant in that case)
+    if [[ "$orch_superuser" != "true" ]]; then
+        echo "Granting specific database privileges to orchestrator..."
+        sudo -u postgres psql <<SQL
 GRANT CONNECT ON DATABASE postgres TO orchestrator_integration_user;
 GRANT pg_signal_backend TO orchestrator_integration_user;
 GRANT USAGE ON SCHEMA public TO orchestrator_integration_user;
@@ -134,22 +200,85 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT ALL PRIVILEGES ON TABLES TO orchestrator_integration_user WITH GRANT OPTION;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT ALL PRIVILEGES ON SEQUENCES TO orchestrator_integration_user WITH GRANT OPTION;
+SQL
+    fi
 
--- Create example users with various roles
-CREATE USER app_admin WITH PASSWORD '$USER1_PASS' CREATEDB;
-ALTER USER app_admin WITH SUPERUSER;
+    # Create example users
+    sudo -u postgres psql <<SQL
 
-CREATE USER app_readwrite WITH PASSWORD '$USER2_PASS';
+-- Create or alter example users with various roles
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_admin') THEN
+    CREATE USER app_admin WITH PASSWORD '$USER1_PASS' CREATEDB SUPERUSER;
+  ELSE
+    ALTER USER app_admin WITH PASSWORD '$USER1_PASS' CREATEDB SUPERUSER;
+  END IF;
+END \$\$;
+
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_readwrite') THEN
+    CREATE USER app_readwrite WITH PASSWORD '$USER2_PASS';
+  ELSE
+    ALTER USER app_readwrite WITH PASSWORD '$USER2_PASS';
+  END IF;
+END \$\$;
 GRANT ALL PRIVILEGES ON DATABASE postgres TO app_readwrite;
 
-CREATE USER app_readonly WITH PASSWORD '$USER3_PASS';
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_readonly') THEN
+    CREATE USER app_readonly WITH PASSWORD '$USER3_PASS';
+  ELSE
+    ALTER USER app_readonly WITH PASSWORD '$USER3_PASS';
+  END IF;
+END \$\$;
 GRANT CONNECT ON DATABASE postgres TO app_readonly;
 
-CREATE USER report_user WITH PASSWORD '$USER4_PASS';
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'report_user') THEN
+    CREATE USER report_user WITH PASSWORD '$USER4_PASS';
+  ELSE
+    ALTER USER report_user WITH PASSWORD '$USER4_PASS';
+  END IF;
+END \$\$;
 GRANT CONNECT ON DATABASE postgres TO report_user;
 
-CREATE USER backup_user WITH PASSWORD '$USER5_PASS' REPLICATION;
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'backup_user') THEN
+    CREATE USER backup_user WITH PASSWORD '$USER5_PASS' REPLICATION;
+  ELSE
+    ALTER USER backup_user WITH PASSWORD '$USER5_PASS' REPLICATION;
+  END IF;
+END \$\$;
 SQL
+
+    # If orchestrator is NOT superuser, grant ADMIN option on all non-superuser roles
+    # This allows password changes on non-superuser accounts (PostgreSQL 16+ requirement)
+    if [[ "$orch_superuser" != "true" ]]; then
+        echo "Granting ADMIN option on non-superuser roles to orchestrator..."
+        sudo -u postgres psql <<SQL
+DO \$\$
+DECLARE
+    role_name TEXT;
+BEGIN
+    FOR role_name IN
+        SELECT rolname FROM pg_roles
+        WHERE rolname NOT IN ('postgres', 'pg_monitor', 'pg_read_all_settings', 'pg_read_all_stats',
+                              'pg_stat_scan_tables', 'pg_read_server_files', 'pg_write_server_files',
+                              'pg_execute_server_program', 'pg_signal_backend', 'orchestrator_integration_user', 'dbadmin')
+          AND rolsuper = false
+          AND rolname NOT LIKE 'pg_%'
+    LOOP
+        EXECUTE format('GRANT %I TO orchestrator_integration_user WITH ADMIN OPTION', role_name);
+    END LOOP;
+END
+\$\$;
+SQL
+    fi
 }
 
 # Write credentials file
@@ -191,6 +320,7 @@ CREDS
 main() {
     local db_engine=""
     local detect_only=false
+    local orchestrator_superuser=false
 
     # Parse command-line arguments
     while [[ $# -gt 0 ]]; do
@@ -201,6 +331,10 @@ main() {
                 ;;
             --mysql)
                 db_engine="mysql"
+                shift
+                ;;
+            --orchestrator-superuser)
+                orchestrator_superuser=true
                 shift
                 ;;
             --detect-only)
@@ -248,7 +382,7 @@ main() {
             else
                 echo "PostgreSQL already installed. Skipping installation."
             fi
-            create_postgres_users
+            create_postgres_users "$orchestrator_superuser"
             write_credentials "postgresql"
             ;;
         mysql)
@@ -258,7 +392,7 @@ main() {
             else
                 echo "MySQL already installed. Skipping installation."
             fi
-            create_mysql_users
+            create_mysql_users "$orchestrator_superuser"
             write_credentials "mysql"
             ;;
         *)
