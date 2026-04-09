@@ -2,6 +2,8 @@
 
 **Run Windows administrative tools under a privileged Active Directory account, using credentials managed by Okta Privileged Access (OPA).**
 
+**_These scripts are not supported by Okta, are experimental, and are not intended for production use.  No warranty is expressed or implied.  Please review and understand all scripts before using.  Use at your own risk._**
+
 `SftRunAs` provides a safe, repeatable way for users logged in with **non-admin Windows accounts** to launch administrative tools (ADUC, GPMC, DNS, etc.) using **just-in-time credentials** retrieved from Okta Privileged Access via the `sft` client.
 
 No passwords are stored on disk. Credentials are retrieved at runtime, used to create a Windows logon token, and discarded.

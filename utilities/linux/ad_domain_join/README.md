@@ -6,7 +6,7 @@ Automated script to join Linux systems to an Active Directory domain with proper
 
 The `join-ad.sh` script automates the process of joining Linux systems to an Active Directory domain. It handles package installation, DNS verification, domain discovery, SSSD configuration, and SSH setup across multiple Linux distributions.
 
-**_These scripts are not supported by Okta, and no warranty is expressed or implied.  Please review and understand all scripts before using.  Use at your own risk._**
+**_These scripts are not supported by Okta, are experimental, and are not intended for production use.  No warranty is expressed or implied.  Please review and understand all scripts before using.  Use at your own risk._**
 
 ## Supported Distributions
 

@@ -11,7 +11,7 @@ It automates the process of:
 
 This serves as a practical example for machine-to-machine authentication flows where a workload (in this case, a GCP VM) needs to programmatically and securely access other infrastructure.
 
-**_This script is provided as-is, with no support or warranty expressed or implied. Please review and understand the script before using it. Use at your own risk._**
+**_These scripts are not supported by Okta, are experimental, and are not intended for production use.  No warranty is expressed or implied.  Please review and understand all scripts before using.  Use at your own risk._**
 
 ## Prerequisites
 
