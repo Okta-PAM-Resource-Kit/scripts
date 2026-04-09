@@ -91,7 +91,7 @@ create_mysql_users() {
 
     # Determine orchestrator privileges based on flag
     if [[ "$orch_superuser" == "true" ]]; then
-        echo "Granting full admin privileges to orchestrator (can manage all users and databases)"
+        echo "Granting SYSTEM_USER to orchestrator (can perform admin actions on all accounts)"
     else
         echo "Granting limited privileges to orchestrator (can create users and manage target database)"
     fi
@@ -110,13 +110,15 @@ SQL
     fi
 
     # Grant/update orchestrator privileges
+    # SYSTEM_USER allows administrative actions on all accounts (MySQL 8.0.16+)
     if [[ "$orch_superuser" == "true" ]]; then
         sudo mysql -u root <<SQL
-GRANT ALL PRIVILEGES ON *.* TO 'orchestrator_integration_user'@'%' WITH GRANT OPTION;
-FLUSH PRIVILEGES;
+GRANT SYSTEM_USER ON *.* TO 'orchestrator_integration_user'@'%';
 SQL
-    else
-        sudo mysql -u root <<SQL
+    fi
+
+    # Grant common orchestrator privileges
+    sudo mysql -u root <<SQL
 GRANT SELECT ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT UPDATE ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT SELECT ON mysql.role_edges TO 'orchestrator_integration_user'@'%';
@@ -126,7 +128,6 @@ GRANT CREATE ROLE ON *.* TO 'orchestrator_integration_user'@'%';
 GRANT ALL PRIVILEGES ON \`<target_db>\`.* TO 'orchestrator_integration_user'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 SQL
-    fi
 
     # Create example users only if -e flag is set
     if [[ "$create_examples" == "true" ]]; then
@@ -348,6 +349,14 @@ write_credentials() {
     local db_type=$1
     local include_examples=$2
     local creds_file="/root/${db_type}-credentials.txt"
+
+    # Backup existing credentials file if it exists
+    if sudo test -f "$creds_file"; then
+        local timestamp=$(date +%Y%m%d_%H%M%S)
+        local backup_file="${creds_file}.backup.${timestamp}"
+        sudo cp "$creds_file" "$backup_file"
+        echo "Existing credentials backed up to $backup_file"
+    fi
 
     if [[ "$include_examples" == "true" ]]; then
         sudo bash -c "cat > '$creds_file'" <<CREDS
