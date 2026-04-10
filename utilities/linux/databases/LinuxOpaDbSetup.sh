@@ -4,6 +4,7 @@ set -e
 # LinuxOpaDbSetup.sh - Unified PostgreSQL and MySQL setup script
 # Supports auto-detection or explicit database selection
 # Supports Debian/Ubuntu (apt) and RHEL/CentOS/Rocky/Alma (yum/dnf)
+# Automatically detects database version and applies version-specific permissions
 
 # Usage information
 usage() {
@@ -23,10 +24,17 @@ OPTIONS:
     -s                    Grant SUPERUSER to orchestrator (allows password changes on all accounts)
                           Default: orchestrator can only change non-superuser passwords
     -e                    Create example user accounts (app_admin, app_readwrite, app_readonly, report_user, backup_user)
-    -d                    Detect installed database without setup
+    -d                    Detect installed database and version without setup
     -h                    Show this help message
 
 If no database option (-p/-m) is specified, the script will auto-detect the installed database.
+
+Version Detection:
+The script automatically detects the database version and applies appropriate permissions:
+  - PostgreSQL 16+: Requires ADMIN OPTION for password changes with CREATEROLE
+  - PostgreSQL <16: CREATEROLE can change non-superuser passwords directly
+  - MySQL 8.0+: Uses SYSTEM_USER and role management features
+  - MySQL 5.x: Uses SUPER privilege and legacy permission model
 
 Examples:
     $0 -p                # Install PostgreSQL with orchestrator only (default privileges)
@@ -96,6 +104,63 @@ detect_database() {
     fi
 
     echo "$detected"
+}
+
+# Detect PostgreSQL version
+detect_postgres_version() {
+    local version_string=""
+    local major_version=""
+
+    if command -v psql >/dev/null 2>&1; then
+        # Get version from psql command
+        version_string=$(psql --version 2>/dev/null | head -1)
+        if [[ $version_string =~ ([0-9]+)\.([0-9]+) ]]; then
+            major_version="${BASH_REMATCH[1]}"
+        elif [[ $version_string =~ ([0-9]+)\ ]]; then
+            # PostgreSQL 10+ uses single number versioning
+            major_version="${BASH_REMATCH[1]}"
+        fi
+    fi
+
+    echo "$major_version"
+}
+
+# Detect MySQL version
+detect_mysql_version() {
+    local version_string=""
+    local major_version=""
+    local minor_version=""
+
+    if command -v mysql >/dev/null 2>&1; then
+        # Get version from mysql command
+        version_string=$(mysql --version 2>/dev/null)
+        if [[ $version_string =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+            major_version="${BASH_REMATCH[1]}"
+            minor_version="${BASH_REMATCH[2]}"
+        fi
+    fi
+
+    # Return as major.minor for easier comparison
+    if [[ -n "$major_version" ]]; then
+        echo "${major_version}.${minor_version}"
+    fi
+}
+
+# Compare version numbers (returns 0 if v1 >= v2, 1 otherwise)
+version_ge() {
+    local v1=$1
+    local v2=$2
+
+    # Handle empty versions
+    [[ -z "$v1" ]] && return 1
+    [[ -z "$v2" ]] && return 0
+
+    # Compare versions
+    if [[ $(echo -e "$v1\n$v2" | sort -V | head -n1) == "$v2" ]]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 # Generate random passwords (shared function)
@@ -222,9 +287,22 @@ create_mysql_users() {
     echo "Creating MySQL users..."
     local new_users=false
 
-    # Determine orchestrator privileges based on flag
+    # Detect MySQL version
+    local mysql_version=$(detect_mysql_version)
+    echo "Detected MySQL version: ${mysql_version:-unknown}"
+
+    # Determine orchestrator privileges based on flag and version
+    local supports_system_user=false
+    if version_ge "$mysql_version" "8.0"; then
+        supports_system_user=true
+    fi
+
     if [[ "$orch_superuser" == "true" ]]; then
-        echo "Granting SYSTEM_USER to orchestrator (can perform admin actions on all accounts)"
+        if [[ "$supports_system_user" == "true" ]]; then
+            echo "Granting SYSTEM_USER to orchestrator (MySQL 8.0+: can perform admin actions on all accounts)"
+        else
+            echo "Granting SUPER to orchestrator (MySQL 5.x: elevated privileges)"
+        fi
     else
         echo "Granting limited privileges to orchestrator (can create users and manage target database)"
     fi
@@ -242,16 +320,26 @@ CREATE USER 'orchestrator_integration_user'@'%' IDENTIFIED BY '$ORCH_PASS';
 SQL
     fi
 
-    # Grant/update orchestrator privileges
-    # SYSTEM_USER allows administrative actions on all accounts (MySQL 8.0.16+)
+    # Grant/update orchestrator privileges based on version
     if [[ "$orch_superuser" == "true" ]]; then
-        sudo mysql -u root <<SQL
+        if [[ "$supports_system_user" == "true" ]]; then
+            # MySQL 8.0.16+ supports SYSTEM_USER privilege
+            sudo mysql -u root <<SQL
 GRANT SYSTEM_USER ON *.* TO 'orchestrator_integration_user'@'%';
 SQL
+        else
+            # MySQL 5.x uses SUPER privilege for elevated access
+            sudo mysql -u root <<SQL
+GRANT SUPER ON *.* TO 'orchestrator_integration_user'@'%';
+SQL
+        fi
     fi
 
     # Grant common orchestrator privileges
-    sudo mysql -u root <<SQL
+    # Some privileges are version-specific
+    if [[ "$supports_system_user" == "true" ]]; then
+        # MySQL 8.0+ privileges (includes role support)
+        sudo mysql -u root <<SQL
 GRANT SELECT ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT UPDATE ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT SELECT ON mysql.role_edges TO 'orchestrator_integration_user'@'%';
@@ -261,6 +349,17 @@ GRANT CREATE ROLE ON *.* TO 'orchestrator_integration_user'@'%';
 GRANT ALL PRIVILEGES ON \`<target_db>\`.* TO 'orchestrator_integration_user'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 SQL
+    else
+        # MySQL 5.x privileges (no role support)
+        sudo mysql -u root <<SQL
+GRANT SELECT ON mysql.user TO 'orchestrator_integration_user'@'%';
+GRANT UPDATE ON mysql.user TO 'orchestrator_integration_user'@'%';
+GRANT RELOAD ON *.* TO 'orchestrator_integration_user'@'%';
+GRANT CREATE USER ON *.* TO 'orchestrator_integration_user'@'%';
+GRANT ALL PRIVILEGES ON \`<target_db>\`.* TO 'orchestrator_integration_user'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+SQL
+    fi
 
     # Create example users only if -e flag is set
     if [[ "$create_examples" == "true" ]]; then
@@ -342,6 +441,17 @@ create_postgres_users() {
     echo "Creating PostgreSQL users..."
     local new_users=false
 
+    # Detect PostgreSQL version
+    local pg_version=$(detect_postgres_version)
+    echo "Detected PostgreSQL version: ${pg_version:-unknown}"
+
+    # Determine version-specific requirements
+    local requires_admin_option=false
+    if version_ge "$pg_version" "16"; then
+        requires_admin_option=true
+        echo "PostgreSQL 16+ detected: Will use ADMIN OPTION for password change privileges"
+    fi
+
     # Determine orchestrator privileges based on flag
     local orch_privileges
     if [[ "$orch_superuser" == "true" ]]; then
@@ -349,7 +459,11 @@ create_postgres_users() {
         echo "Granting SUPERUSER to orchestrator (can change all passwords including superusers)"
     else
         orch_privileges="CREATEROLE"
-        echo "Granting CREATEROLE to orchestrator (can change non-superuser passwords only)"
+        if [[ "$requires_admin_option" == "true" ]]; then
+            echo "Granting CREATEROLE to orchestrator (PostgreSQL 16+: requires ADMIN OPTION for password changes)"
+        else
+            echo "Granting CREATEROLE to orchestrator (can change non-superuser passwords only)"
+        fi
     fi
 
     # Handle orchestrator_integration_user - always update privileges, set password only on creation
@@ -371,7 +485,11 @@ SQL
     # (SUPERUSER already has all these privileges, so they're redundant in that case)
     if [[ "$orch_superuser" != "true" ]]; then
         echo "Granting specific database privileges to orchestrator..."
-        sudo -u postgres psql <<SQL
+
+        # Version-specific privilege grants
+        if [[ "$requires_admin_option" == "true" ]]; then
+            # PostgreSQL 16+ requires more explicit privilege management
+            sudo -u postgres psql <<SQL
 GRANT CONNECT ON DATABASE postgres TO orchestrator_integration_user;
 GRANT pg_signal_backend TO orchestrator_integration_user;
 GRANT USAGE ON SCHEMA public TO orchestrator_integration_user;
@@ -384,6 +502,22 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT ALL PRIVILEGES ON SEQUENCES TO orchestrator_integration_user WITH GRANT OPTION;
 SQL
+        else
+            # Pre-16 PostgreSQL versions
+            sudo -u postgres psql <<SQL
+GRANT CONNECT ON DATABASE postgres TO orchestrator_integration_user;
+GRANT pg_signal_backend TO orchestrator_integration_user;
+GRANT USAGE ON SCHEMA public TO orchestrator_integration_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO orchestrator_integration_user;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO orchestrator_integration_user WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO orchestrator_integration_user WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON SCHEMA public TO orchestrator_integration_user WITH GRANT OPTION;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT ALL PRIVILEGES ON TABLES TO orchestrator_integration_user WITH GRANT OPTION;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT ALL PRIVILEGES ON SEQUENCES TO orchestrator_integration_user WITH GRANT OPTION;
+SQL
+        fi
     fi
 
     # Create example users only if -e flag is set
@@ -450,9 +584,15 @@ SQL
     fi
 
     # If orchestrator is NOT superuser, grant ADMIN option on all non-superuser roles
-    # This allows password changes on non-superuser accounts (PostgreSQL 16+ requirement)
+    # This allows password changes on non-superuser accounts
+    # PostgreSQL 16+ requires ADMIN OPTION for password changes even with CREATEROLE
+    # Earlier versions: CREATEROLE can change passwords without ADMIN OPTION (optional but harmless)
     if [[ "$orch_superuser" != "true" && "$create_examples" == "true" ]]; then
-        echo "Granting ADMIN option on non-superuser roles to orchestrator..."
+        if [[ "$requires_admin_option" == "true" ]]; then
+            echo "Granting ADMIN option on non-superuser roles to orchestrator (required for PostgreSQL 16+)..."
+        else
+            echo "Granting ADMIN option on non-superuser roles to orchestrator (best practice)..."
+        fi
         sudo -u postgres psql <<SQL
 DO \$\$
 DECLARE
@@ -578,9 +718,24 @@ main() {
         echo "Detected: $db_engine"
     fi
 
-    # If detect-only mode, exit here
+    # If detect-only mode, show version and exit
     if [[ "$detect_only" == true ]]; then
         echo "Database engine: $db_engine"
+
+        case $db_engine in
+            postgres)
+                local pg_version=$(detect_postgres_version)
+                if [[ -n "$pg_version" ]]; then
+                    echo "PostgreSQL version: $pg_version"
+                fi
+                ;;
+            mysql)
+                local mysql_version=$(detect_mysql_version)
+                if [[ -n "$mysql_version" ]]; then
+                    echo "MySQL version: $mysql_version"
+                fi
+                ;;
+        esac
         exit 0
     fi
 
