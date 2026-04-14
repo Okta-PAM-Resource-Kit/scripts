@@ -116,7 +116,7 @@ detect_postgres_version() {
         version_string=$(psql --version 2>/dev/null | head -1)
         if [[ $version_string =~ ([0-9]+)\.([0-9]+) ]]; then
             major_version="${BASH_REMATCH[1]}"
-        elif [[ $version_string =~ ([0-9]+)\ ]]; then
+        elif [[ $version_string =~ ([0-9]+)[[:space:]] ]]; then
             # PostgreSQL 10+ uses single number versioning
             major_version="${BASH_REMATCH[1]}"
         fi
