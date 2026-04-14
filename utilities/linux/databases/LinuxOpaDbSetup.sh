@@ -24,10 +24,15 @@ OPTIONS:
     -s                    Grant SUPERUSER to orchestrator (allows password changes on all accounts)
                           Default: orchestrator can only change non-superuser passwords
     -e                    Create example user accounts (app_admin, app_readwrite, app_readonly, report_user, backup_user)
+    -D NAME               Target database name (REQUIRED by default)
+    -c                    Create target database if it doesn't exist (requires -D)
+    -l                    Create database-scoped users - users limited to specific database (default, requires -D)
+    -g                    Create global-scope users - all users have cluster-wide privileges (no -D required)
     -d                    Detect installed database and version without setup
     -h                    Show this help message
 
 If no database option (-p/-m) is specified, the script will auto-detect the installed database.
+DEFAULT MODE: Database-scoped users (requires -D). Use -g for global-scope users.
 
 Version Detection:
 The script automatically detects the database version and applies appropriate permissions:
@@ -36,13 +41,20 @@ The script automatically detects the database version and applies appropriate pe
   - MySQL 8.0+: Uses SYSTEM_USER and role management features
   - MySQL 5.x: Uses SUPER privilege and legacy permission model
 
+User Scope Modes:
+  Database-scoped (default): All users (including orchestrator) limited to specific database (requires -D)
+                             - MySQL: orchestrator gets only database privileges (no CREATE USER); example users get dbname.*
+                             - PostgreSQL: orchestrator gets only database privileges (no SUPERUSER/CREATEROLE); example users get only target DB
+  Global (-g):               All users (including orchestrator) have cluster-wide privileges
+                             - MySQL: orchestrator gets CREATE USER, RELOAD, etc.; example users get *.*
+                             - PostgreSQL: orchestrator gets SUPERUSER/CREATEROLE; example users get privileges on all DBs
+
 Examples:
-    $0 -p                # Install PostgreSQL with orchestrator only (default privileges)
-    $0 -p -s             # Install PostgreSQL with orchestrator as superuser
-    $0 -p -e             # Install PostgreSQL with orchestrator and example users
-    $0 -p -s -e          # Install PostgreSQL with orchestrator (superuser) and example users
-    $0 -m                # Install MySQL with orchestrator only
-    $0                   # Auto-detect and configure orchestrator only
+    $0 -p -D mydb -c -e        # Install PostgreSQL, create mydb, database-scoped orchestrator and example users (default)
+    $0 -p -D testdb -e         # Install PostgreSQL with database-scoped users on existing testdb
+    $0 -m -D myapp_db -c       # Install MySQL, create myapp_db, database-scoped orchestrator only
+    $0 -p -g                   # Install PostgreSQL with global orchestrator (cluster-wide privileges)
+    $0 -m -g -e                # Install MySQL with global orchestrator and example users (legacy mode)
 EOF
     exit 1
 }
@@ -163,6 +175,67 @@ version_ge() {
     fi
 }
 
+# Validate database name
+validate_database_name() {
+    local db_name=$1
+
+    # Allow only alphanumeric and underscore
+    if ! [[ $db_name =~ ^[a-zA-Z0-9_]+$ ]]; then
+        echo "ERROR: Invalid database name '$db_name'. Use only alphanumeric characters and underscores." >&2
+        return 1
+    fi
+
+    # Max 63 chars (PostgreSQL limit)
+    if [[ ${#db_name} -gt 63 ]]; then
+        echo "ERROR: Database name too long (max 63 characters)." >&2
+        return 1
+    fi
+
+    # Prevent reserved names
+    case "$db_name" in
+        postgres|mysql|information_schema|performance_schema|sys)
+            echo "ERROR: '$db_name' is a reserved database name." >&2
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
+# Validate flag combinations
+validate_flags() {
+    local use_local_users=$1
+    local use_global_users=$2
+    local target_db=$3
+    local create_database=$4
+
+    # Cannot use both -g and -l
+    if [[ "$use_global_users" == "true" && "$use_local_users" == "true" ]]; then
+        echo "ERROR: Cannot use both -g (global users) and -l (database-scoped users)" >&2
+        return 1
+    fi
+
+    # Database-scoped mode (default) requires -D
+    if [[ "$use_local_users" == "true" && -z "$target_db" ]]; then
+        echo "ERROR: Database-scoped mode requires -D flag to specify database name" >&2
+        echo "       Use -g flag for global-scope users (no -D required)" >&2
+        return 1
+    fi
+
+    # -c requires -D
+    if [[ "$create_database" == "true" && -z "$target_db" ]]; then
+        echo "ERROR: -c (create database) requires -D flag to specify database name" >&2
+        return 1
+    fi
+
+    # Validate database name if specified
+    if [[ -n "$target_db" ]]; then
+        validate_database_name "$target_db" || return 1
+    fi
+
+    return 0
+}
+
 # Generate random passwords (shared function)
 generate_passwords() {
     ADMIN_PASS=$(openssl rand -base64 16)
@@ -172,6 +245,47 @@ generate_passwords() {
     USER3_PASS=$(openssl rand -base64 12)
     USER4_PASS=$(openssl rand -base64 12)
     USER5_PASS=$(openssl rand -base64 12)
+}
+
+# Create PostgreSQL database
+create_postgres_database() {
+    local db_name=$1
+    echo "Creating PostgreSQL database '$db_name'..." >&2
+
+    # Check if database exists
+    local db_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$db_name'")
+
+    if [[ "$db_exists" == "1" ]]; then
+        echo "Database '$db_name' already exists. Skipping creation." >&2
+        return 0
+    fi
+
+    # Create database
+    sudo -u postgres createdb "$db_name"
+    echo "Database '$db_name' created successfully." >&2
+
+    # Grant initial privileges to postgres (owner)
+    sudo -u postgres psql <<SQL
+GRANT ALL PRIVILEGES ON DATABASE "$db_name" TO postgres;
+SQL
+}
+
+# Create MySQL database
+create_mysql_database() {
+    local db_name=$1
+    echo "Creating MySQL database '$db_name'..." >&2
+
+    # CREATE DATABASE IF NOT EXISTS handles both check and creation atomically
+    sudo mysql -u root <<SQL
+CREATE DATABASE IF NOT EXISTS \`$db_name\`;
+SQL
+
+    if [[ $? -eq 0 ]]; then
+        echo "Database '$db_name' ready (created or already exists)." >&2
+    else
+        echo "ERROR: Failed to create/verify database '$db_name'" >&2
+        return 1
+    fi
 }
 
 # Install and configure MySQL
@@ -284,6 +398,8 @@ install_postgres() {
 create_mysql_users() {
     local orch_superuser=$1
     local create_examples=$2
+    local target_db=$3
+    local use_db_scope=$4
     echo "Creating MySQL users..." >&2
     local new_users=false
 
@@ -297,14 +413,18 @@ create_mysql_users() {
         supports_system_user=true
     fi
 
-    if [[ "$orch_superuser" == "true" ]]; then
-        if [[ "$supports_system_user" == "true" ]]; then
-            echo "Granting SYSTEM_USER to orchestrator (MySQL 8.0+: can perform admin actions on all accounts)" >&2
-        else
-            echo "Granting SUPER to orchestrator (MySQL 5.x: elevated privileges)" >&2
-        fi
+    if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
+        echo "Granting database-scoped privileges to orchestrator (limited to database '$target_db')" >&2
     else
-        echo "Granting limited privileges to orchestrator (can create users and manage target database)" >&2
+        if [[ "$orch_superuser" == "true" ]]; then
+            if [[ "$supports_system_user" == "true" ]]; then
+                echo "Granting SYSTEM_USER to orchestrator (MySQL 8.0+: can perform admin actions on all accounts)" >&2
+            else
+                echo "Granting SUPER to orchestrator (MySQL 5.x: elevated privileges)" >&2
+            fi
+        else
+            echo "Granting limited privileges to orchestrator (can create users and manage target database)" >&2
+        fi
     fi
 
     # Handle orchestrator_integration_user - always update privileges, set password only on creation
@@ -320,45 +440,52 @@ CREATE USER 'orchestrator_integration_user'@'%' IDENTIFIED BY '$ORCH_PASS';
 SQL
     fi
 
-    # Grant/update orchestrator privileges based on version
-    if [[ "$orch_superuser" == "true" ]]; then
-        if [[ "$supports_system_user" == "true" ]]; then
-            # MySQL 8.0.16+ supports SYSTEM_USER privilege
-            sudo mysql -u root <<SQL
+    # Grant/update orchestrator privileges based on scope and version
+    if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
+        # Database-scoped mode: only grant privileges on target database
+        sudo mysql -u root <<SQL
+GRANT ALL PRIVILEGES ON \`$target_db\`.* TO 'orchestrator_integration_user'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+SQL
+    else
+        # Global mode: grant cluster-wide privileges
+        if [[ "$orch_superuser" == "true" ]]; then
+            if [[ "$supports_system_user" == "true" ]]; then
+                # MySQL 8.0.16+ supports SYSTEM_USER privilege
+                sudo mysql -u root <<SQL
 GRANT SYSTEM_USER ON *.* TO 'orchestrator_integration_user'@'%';
 SQL
-        else
-            # MySQL 5.x uses SUPER privilege for elevated access
-            sudo mysql -u root <<SQL
+            else
+                # MySQL 5.x uses SUPER privilege for elevated access
+                sudo mysql -u root <<SQL
 GRANT SUPER ON *.* TO 'orchestrator_integration_user'@'%';
 SQL
+            fi
         fi
-    fi
 
-    # Grant common orchestrator privileges
-    # Some privileges are version-specific
-    if [[ "$supports_system_user" == "true" ]]; then
-        # MySQL 8.0+ privileges (includes role support)
-        sudo mysql -u root <<SQL
+        # Grant common orchestrator privileges
+        # Some privileges are version-specific
+        if [[ "$supports_system_user" == "true" ]]; then
+            # MySQL 8.0+ privileges (includes role support)
+            sudo mysql -u root <<SQL
 GRANT SELECT ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT UPDATE ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT SELECT ON mysql.role_edges TO 'orchestrator_integration_user'@'%';
 GRANT RELOAD ON *.* TO 'orchestrator_integration_user'@'%';
 GRANT CREATE USER ON *.* TO 'orchestrator_integration_user'@'%';
 GRANT CREATE ROLE ON *.* TO 'orchestrator_integration_user'@'%';
-GRANT ALL PRIVILEGES ON \`<target_db>\`.* TO 'orchestrator_integration_user'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 SQL
-    else
-        # MySQL 5.x privileges (no role support)
-        sudo mysql -u root <<SQL
+        else
+            # MySQL 5.x privileges (no role support)
+            sudo mysql -u root <<SQL
 GRANT SELECT ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT UPDATE ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT RELOAD ON *.* TO 'orchestrator_integration_user'@'%';
 GRANT CREATE USER ON *.* TO 'orchestrator_integration_user'@'%';
-GRANT ALL PRIVILEGES ON \`<target_db>\`.* TO 'orchestrator_integration_user'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 SQL
+        fi
     fi
 
     # Create example users only if -e flag is set
@@ -371,10 +498,17 @@ SQL
         else
             echo "Creating app_admin..." >&2
             new_users=true
-            sudo mysql -u root <<SQL
+            if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
+                sudo mysql -u root <<SQL
+CREATE USER 'app_admin'@'%' IDENTIFIED BY '$USER1_PASS';
+GRANT ALL PRIVILEGES ON \`$target_db\`.* TO 'app_admin'@'%';
+SQL
+            else
+                sudo mysql -u root <<SQL
 CREATE USER 'app_admin'@'%' IDENTIFIED BY '$USER1_PASS';
 GRANT ALL PRIVILEGES ON *.* TO 'app_admin'@'%';
 SQL
+            fi
         fi
 
         local app_readwrite_exists=$(sudo mysql -u root -sse "SELECT EXISTS(SELECT 1 FROM mysql.user WHERE user = 'app_readwrite' AND host = '%')")
@@ -383,10 +517,17 @@ SQL
         else
             echo "Creating app_readwrite..." >&2
             new_users=true
-            sudo mysql -u root <<SQL
+            if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
+                sudo mysql -u root <<SQL
+CREATE USER 'app_readwrite'@'%' IDENTIFIED BY '$USER2_PASS';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`$target_db\`.* TO 'app_readwrite'@'%';
+SQL
+            else
+                sudo mysql -u root <<SQL
 CREATE USER 'app_readwrite'@'%' IDENTIFIED BY '$USER2_PASS';
 GRANT SELECT, INSERT, UPDATE, DELETE ON *.* TO 'app_readwrite'@'%';
 SQL
+            fi
         fi
 
         local app_readonly_exists=$(sudo mysql -u root -sse "SELECT EXISTS(SELECT 1 FROM mysql.user WHERE user = 'app_readonly' AND host = '%')")
@@ -395,10 +536,17 @@ SQL
         else
             echo "Creating app_readonly..." >&2
             new_users=true
-            sudo mysql -u root <<SQL
+            if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
+                sudo mysql -u root <<SQL
+CREATE USER 'app_readonly'@'%' IDENTIFIED BY '$USER3_PASS';
+GRANT SELECT ON \`$target_db\`.* TO 'app_readonly'@'%';
+SQL
+            else
+                sudo mysql -u root <<SQL
 CREATE USER 'app_readonly'@'%' IDENTIFIED BY '$USER3_PASS';
 GRANT SELECT ON *.* TO 'app_readonly'@'%';
 SQL
+            fi
         fi
 
         local report_user_exists=$(sudo mysql -u root -sse "SELECT EXISTS(SELECT 1 FROM mysql.user WHERE user = 'report_user' AND host = '%')")
@@ -407,10 +555,17 @@ SQL
         else
             echo "Creating report_user..." >&2
             new_users=true
-            sudo mysql -u root <<SQL
+            if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
+                sudo mysql -u root <<SQL
+CREATE USER 'report_user'@'%' IDENTIFIED BY '$USER4_PASS';
+GRANT SELECT, SHOW VIEW ON \`$target_db\`.* TO 'report_user'@'%';
+SQL
+            else
+                sudo mysql -u root <<SQL
 CREATE USER 'report_user'@'%' IDENTIFIED BY '$USER4_PASS';
 GRANT SELECT, SHOW VIEW ON *.* TO 'report_user'@'%';
 SQL
+            fi
         fi
 
         local backup_user_exists=$(sudo mysql -u root -sse "SELECT EXISTS(SELECT 1 FROM mysql.user WHERE user = 'backup_user' AND host = '%')")
@@ -419,10 +574,17 @@ SQL
         else
             echo "Creating backup_user..." >&2
             new_users=true
-            sudo mysql -u root <<SQL
+            if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
+                sudo mysql -u root <<SQL
+CREATE USER 'backup_user'@'%' IDENTIFIED BY '$USER5_PASS';
+GRANT SELECT, LOCK TABLES, SHOW VIEW, EVENT, TRIGGER ON \`$target_db\`.* TO 'backup_user'@'%';
+SQL
+            else
+                sudo mysql -u root <<SQL
 CREATE USER 'backup_user'@'%' IDENTIFIED BY '$USER5_PASS';
 GRANT SELECT, LOCK TABLES, SHOW VIEW, EVENT, TRIGGER ON *.* TO 'backup_user'@'%';
 SQL
+            fi
         fi
     fi
 
@@ -438,8 +600,16 @@ SQL
 create_postgres_users() {
     local orch_superuser=$1
     local create_examples=$2
+    local target_db=$3
+    local use_db_scope=$4
     echo "Creating PostgreSQL users..." >&2
     local new_users=false
+
+    # Determine which database to grant privileges on
+    local grant_db="postgres"
+    if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
+        grant_db="$target_db"
+    fi
 
     # Detect PostgreSQL version
     local pg_version=$(detect_postgres_version)
@@ -452,17 +622,22 @@ create_postgres_users() {
         echo "PostgreSQL 16+ detected: Will use ADMIN OPTION for password change privileges" >&2
     fi
 
-    # Determine orchestrator privileges based on flag
-    local orch_privileges
-    if [[ "$orch_superuser" == "true" ]]; then
-        orch_privileges="SUPERUSER"
-        echo "Granting SUPERUSER to orchestrator (can change all passwords including superusers)" >&2
+    # Determine orchestrator privileges based on scope and flag
+    local orch_privileges=""
+    if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
+        echo "Granting database-scoped privileges to orchestrator (limited to database '$grant_db')" >&2
     else
-        orch_privileges="CREATEROLE"
-        if [[ "$requires_admin_option" == "true" ]]; then
-            echo "Granting CREATEROLE to orchestrator (PostgreSQL 16+: requires ADMIN OPTION for password changes)" >&2
+        # Global mode: set role attributes
+        if [[ "$orch_superuser" == "true" ]]; then
+            orch_privileges="SUPERUSER"
+            echo "Granting SUPERUSER to orchestrator (can change all passwords including superusers)" >&2
         else
-            echo "Granting CREATEROLE to orchestrator (can change non-superuser passwords only)" >&2
+            orch_privileges="CREATEROLE"
+            if [[ "$requires_admin_option" == "true" ]]; then
+                echo "Granting CREATEROLE to orchestrator (PostgreSQL 16+: requires ADMIN OPTION for password changes)" >&2
+            else
+                echo "Granting CREATEROLE to orchestrator (can change non-superuser passwords only)" >&2
+            fi
         fi
     fi
 
@@ -470,27 +645,37 @@ create_postgres_users() {
     local orch_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='orchestrator_integration_user'")
     if [[ "$orch_exists" == "1" ]]; then
         echo "orchestrator_integration_user exists, updating privileges only..." >&2
-        sudo -u postgres psql <<SQL
+        if [[ -n "$orch_privileges" ]]; then
+            sudo -u postgres psql <<SQL
 ALTER USER orchestrator_integration_user WITH $orch_privileges;
 SQL
+        fi
     else
         echo "Creating orchestrator_integration_user..." >&2
         new_users=true
-        sudo -u postgres psql <<SQL
+        if [[ -n "$orch_privileges" ]]; then
+            sudo -u postgres psql <<SQL
 CREATE USER orchestrator_integration_user WITH PASSWORD '$ORCH_PASS' $orch_privileges;
 SQL
+        else
+            sudo -u postgres psql <<SQL
+CREATE USER orchestrator_integration_user WITH PASSWORD '$ORCH_PASS';
+SQL
+        fi
     fi
 
-    # If orchestrator is NOT superuser, grant specific privileges
-    # (SUPERUSER already has all these privileges, so they're redundant in that case)
-    if [[ "$orch_superuser" != "true" ]]; then
+    # Grant database-specific privileges
+    # In database-scoped mode: these are the ONLY privileges
+    # In global mode with non-superuser: additional privileges to CREATEROLE
+    # In global mode with superuser: redundant but harmless
+    if [[ "$use_db_scope" == "true" || "$orch_superuser" != "true" ]]; then
         echo "Granting specific database privileges to orchestrator..." >&2
 
         # Version-specific privilege grants
         if [[ "$requires_admin_option" == "true" ]]; then
             # PostgreSQL 16+ requires more explicit privilege management
             sudo -u postgres psql <<SQL
-GRANT CONNECT ON DATABASE postgres TO orchestrator_integration_user;
+GRANT CONNECT ON DATABASE $grant_db TO orchestrator_integration_user;
 GRANT pg_signal_backend TO orchestrator_integration_user;
 GRANT USAGE ON SCHEMA public TO orchestrator_integration_user;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO orchestrator_integration_user;
@@ -505,7 +690,7 @@ SQL
         else
             # Pre-16 PostgreSQL versions
             sudo -u postgres psql <<SQL
-GRANT CONNECT ON DATABASE postgres TO orchestrator_integration_user;
+GRANT CONNECT ON DATABASE $grant_db TO orchestrator_integration_user;
 GRANT pg_signal_backend TO orchestrator_integration_user;
 GRANT USAGE ON SCHEMA public TO orchestrator_integration_user;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO orchestrator_integration_user;
@@ -530,9 +715,16 @@ SQL
         else
             echo "Creating app_admin..." >&2
             new_users=true
-            sudo -u postgres psql <<SQL
+            if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
+                sudo -u postgres psql <<SQL
+CREATE USER app_admin WITH PASSWORD '$USER1_PASS';
+GRANT ALL PRIVILEGES ON DATABASE $grant_db TO app_admin;
+SQL
+            else
+                sudo -u postgres psql <<SQL
 CREATE USER app_admin WITH PASSWORD '$USER1_PASS' CREATEDB SUPERUSER;
 SQL
+            fi
         fi
 
         local app_readwrite_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='app_readwrite'")
@@ -543,7 +735,7 @@ SQL
             new_users=true
             sudo -u postgres psql <<SQL
 CREATE USER app_readwrite WITH PASSWORD '$USER2_PASS';
-GRANT ALL PRIVILEGES ON DATABASE postgres TO app_readwrite;
+GRANT ALL PRIVILEGES ON DATABASE $grant_db TO app_readwrite;
 SQL
         fi
 
@@ -555,7 +747,7 @@ SQL
             new_users=true
             sudo -u postgres psql <<SQL
 CREATE USER app_readonly WITH PASSWORD '$USER3_PASS';
-GRANT CONNECT ON DATABASE postgres TO app_readonly;
+GRANT CONNECT ON DATABASE $grant_db TO app_readonly;
 SQL
         fi
 
@@ -567,7 +759,7 @@ SQL
             new_users=true
             sudo -u postgres psql <<SQL
 CREATE USER report_user WITH PASSWORD '$USER4_PASS';
-GRANT CONNECT ON DATABASE postgres TO report_user;
+GRANT CONNECT ON DATABASE $grant_db TO report_user;
 SQL
         fi
 
@@ -577,9 +769,16 @@ SQL
         else
             echo "Creating backup_user..." >&2
             new_users=true
-            sudo -u postgres psql <<SQL
+            if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
+                sudo -u postgres psql <<SQL
+CREATE USER backup_user WITH PASSWORD '$USER5_PASS';
+GRANT CONNECT ON DATABASE $grant_db TO backup_user;
+SQL
+            else
+                sudo -u postgres psql <<SQL
 CREATE USER backup_user WITH PASSWORD '$USER5_PASS' REPLICATION;
 SQL
+            fi
         fi
     fi
 
@@ -621,6 +820,8 @@ SQL
 write_credentials() {
     local db_type=$1
     local include_examples=$2
+    local target_db=$3
+    local scope=$4
     local creds_file="/root/${db_type}-credentials.txt"
 
     # Backup existing credentials file if it exists
@@ -636,6 +837,7 @@ write_credentials() {
 ${db_type^^} Orchestrator Account:
   Username: orchestrator_integration_user
   Password: $ORCH_PASS
+  Scope: $scope
 
 Example User Accounts:
   1. app_admin (full/superuser privileges)
@@ -658,6 +860,7 @@ CREDS
 ${db_type^^} Orchestrator Account:
   Username: orchestrator_integration_user
   Password: $ORCH_PASS
+  Scope: $scope
 CREDS
     fi
 
@@ -671,6 +874,10 @@ main() {
     local detect_only=false
     local orchestrator_superuser=false
     local create_example_users=false
+    local use_global_users=false
+    local use_local_users=false
+    local target_db=""
+    local create_database=false
 
     # Parse command-line arguments
     while [[ $# -gt 0 ]]; do
@@ -691,6 +898,22 @@ main() {
                 create_example_users=true
                 shift
                 ;;
+            -g)
+                use_global_users=true
+                shift
+                ;;
+            -l)
+                use_local_users=true
+                shift
+                ;;
+            -D)
+                target_db="$2"
+                shift 2
+                ;;
+            -c)
+                create_database=true
+                shift
+                ;;
             -d)
                 detect_only=true
                 shift
@@ -704,6 +927,14 @@ main() {
                 ;;
         esac
     done
+
+    # Set default: if neither -g nor -l specified, use database-scoped (requires -D)
+    if [[ "$use_global_users" == "false" && "$use_local_users" == "false" ]]; then
+        use_local_users=true
+    fi
+
+    # Validate flag combinations
+    validate_flags "$use_local_users" "$use_global_users" "$target_db" "$create_database" || exit 1
 
     # Auto-detect if no engine specified
     if [[ -z "$db_engine" ]]; then
@@ -751,9 +982,20 @@ main() {
             else
                 echo "PostgreSQL already installed. Skipping installation."
             fi
-            local new_users=$(create_postgres_users "$orchestrator_superuser" "$create_example_users")
+
+            # Create target database if requested
+            if [[ "$create_database" == "true" ]]; then
+                create_postgres_database "$target_db"
+            fi
+
+            # Create users
+            local new_users=$(create_postgres_users "$orchestrator_superuser" "$create_example_users" "$target_db" "$use_local_users")
             if [[ "$new_users" == "true" ]]; then
-                write_credentials "postgresql" "$create_example_users"
+                local scope="global"
+                if [[ "$use_local_users" == "true" ]]; then
+                    scope="database-specific"
+                fi
+                write_credentials "postgresql" "$create_example_users" "$target_db" "$scope"
             else
                 echo "No new PostgreSQL users created. Credentials file not modified."
             fi
@@ -765,9 +1007,20 @@ main() {
             else
                 echo "MySQL already installed. Skipping installation."
             fi
-            local new_users=$(create_mysql_users "$orchestrator_superuser" "$create_example_users")
+
+            # Create target database if requested
+            if [[ "$create_database" == "true" ]]; then
+                create_mysql_database "$target_db"
+            fi
+
+            # Create users
+            local new_users=$(create_mysql_users "$orchestrator_superuser" "$create_example_users" "$target_db" "$use_local_users")
             if [[ "$new_users" == "true" ]]; then
-                write_credentials "mysql" "$create_example_users"
+                local scope="global"
+                if [[ "$use_local_users" == "true" ]]; then
+                    scope="database-specific"
+                fi
+                write_credentials "mysql" "$create_example_users" "$target_db" "$scope"
             else
                 echo "No new MySQL users created. Credentials file not modified."
             fi
