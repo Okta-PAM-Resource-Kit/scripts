@@ -311,9 +311,12 @@ function createSftdConfig() {
 		return 0
 	fi
 
-	# Track if we're overwriting an existing config
+	# Create backup if overwriting existing config
 	if [ -f /etc/sft/sftd.yaml ] && [ "$FORCE_OVERWRITE_SERVER_CONFIG" == "true" ]; then
 		SERVER_CONFIG_OVERWRITTEN=true
+		backup_file="/etc/sft/sftd.yaml.backup.$(date +%Y%m%d_%H%M%S)"
+		echo "Creating backup of existing server config: $backup_file"
+		sudo cp /etc/sft/sftd.yaml "$backup_file"
 		echo "Overwriting existing server config /etc/sft/sftd.yaml"
 	else
 		echo "Creating basic sftd configuration"
@@ -402,15 +405,18 @@ function createSftGwConfig(){
 		return 0
 	fi
 
-	# Track if we're overwriting an existing config
+	# Create backup if overwriting existing config
 	if [ -f /etc/sft/sft-gatewayd.yaml ] && [ "$FORCE_OVERWRITE_GATEWAY_CONFIG" == "true" ]; then
 		GATEWAY_CONFIG_OVERWRITTEN=true
+		backup_file="/etc/sft/sft-gatewayd.yaml.backup.$(date +%Y%m%d_%H%M%S)"
+		echo "Creating backup of existing gateway config: $backup_file"
+		sudo cp /etc/sft/sft-gatewayd.yaml "$backup_file"
 		echo "Overwriting existing gateway config /etc/sft/sft-gatewayd.yaml"
 	else
 		echo "Creating gateway configuration"
 	fi
 
-	sudo mkdir -p /var/lib/sft-gatewayd
+	sudo mkdir -p /etc/sft/
 
 	# Check if we need to configure alternate temp storage
 	SESSION_TMP_CONFIG=$(setupGatewaySessionTmpStorage)
@@ -443,15 +449,18 @@ function createSftGwConfigRDP(){
 		return 0
 	fi
 
-	# Track if we're overwriting an existing config
+	# Create backup if overwriting existing config
 	if [ -f /etc/sft/sft-gatewayd.yaml ] && [ "$FORCE_OVERWRITE_GATEWAY_CONFIG" == "true" ]; then
 		GATEWAY_CONFIG_OVERWRITTEN=true
+		backup_file="/etc/sft/sft-gatewayd.yaml.backup.$(date +%Y%m%d_%H%M%S)"
+		echo "Creating backup of existing gateway config: $backup_file"
+		sudo cp /etc/sft/sft-gatewayd.yaml "$backup_file"
 		echo "Overwriting existing gateway config /etc/sft/sft-gatewayd.yaml"
 	else
 		echo "Creating gateway configuration with RDP support"
 	fi
 
-	sudo mkdir -p /var/lib/sft-gatewayd
+	sudo mkdir -p /etc/sft/
 
 	# Check if we need to configure alternate temp storage
 	SESSION_TMP_CONFIG=$(setupGatewaySessionTmpStorage)
@@ -489,15 +498,18 @@ function createSftGwConfigOrchestrator(){
 		return 0
 	fi
 
-	# Track if we're overwriting an existing config
+	# Create backup if overwriting existing config
 	if [ -f /etc/sft/sft-gatewayd.yaml ] && [ "$FORCE_OVERWRITE_GATEWAY_CONFIG" == "true" ]; then
 		GATEWAY_CONFIG_OVERWRITTEN=true
+		backup_file="/etc/sft/sft-gatewayd.yaml.backup.$(date +%Y%m%d_%H%M%S)"
+		echo "Creating backup of existing gateway config: $backup_file"
+		sudo cp /etc/sft/sft-gatewayd.yaml "$backup_file"
 		echo "Overwriting existing gateway config /etc/sft/sft-gatewayd.yaml"
 	else
 		echo "Creating Infrastructure Orchestrator gateway configuration"
 	fi
 
-	sudo mkdir -p /var/lib/sft-gatewayd
+	sudo mkdir -p /etc/sft/
 
 	# Check if we need to configure alternate temp storage
 	SESSION_TMP_CONFIG=$(setupGatewaySessionTmpStorage)
