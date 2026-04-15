@@ -498,6 +498,11 @@ if [ -f /etc/sssd/sssd.conf ]; then
     sudo cp /etc/sssd/sssd.conf /etc/sssd/sssd.conf.backup
 fi
 
+# Construct the AD hostname (short hostname + domain)
+# This prevents issues when the system FQDN differs from the AD-registered name
+AD_HOSTNAME="${SHORT_HOSTNAME}.${DOMAIN_NAME}"
+log_info "Setting SSSD ad_hostname to: ${AD_HOSTNAME}"
+
 # Fine-tune SSSD configuration
 sudo tee /etc/sssd/sssd.conf > /dev/null << EOF
 [sssd]
@@ -517,6 +522,10 @@ ad_domain = ${DOMAIN_NAME}
 use_fully_qualified_names = True
 ldap_id_mapping = True
 access_provider = ad
+
+# Set AD hostname to prevent FQDN mismatch (e.g., GCP internal DNS vs AD DNS)
+# This ensures Kerberos uses the AD-registered hostname instead of system FQDN
+ad_hostname = ${AD_HOSTNAME}
 
 # Disable dynamic DNS updates (avoids permission errors in most setups)
 dyndns_update = False
