@@ -435,7 +435,7 @@ create_mysql_users() {
     else
         echo "Creating orchestrator_integration_user..." >&2
         new_users=true
-        sudo mysql -u root <<SQL
+        sudo mysql -u root >/dev/null <<SQL
 CREATE USER 'orchestrator_integration_user'@'%' IDENTIFIED BY '$ORCH_PASS';
 SQL
     fi
@@ -443,7 +443,7 @@ SQL
     # Grant/update orchestrator privileges based on scope and version
     if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
         # Database-scoped mode: only grant privileges on target database
-        sudo mysql -u root <<SQL
+        sudo mysql -u root >/dev/null <<SQL
 GRANT ALL PRIVILEGES ON \`$target_db\`.* TO 'orchestrator_integration_user'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 SQL
@@ -452,12 +452,12 @@ SQL
         if [[ "$orch_superuser" == "true" ]]; then
             if [[ "$supports_system_user" == "true" ]]; then
                 # MySQL 8.0.16+ supports SYSTEM_USER privilege
-                sudo mysql -u root <<SQL
+                sudo mysql -u root >/dev/null <<SQL
 GRANT SYSTEM_USER ON *.* TO 'orchestrator_integration_user'@'%';
 SQL
             else
                 # MySQL 5.x uses SUPER privilege for elevated access
-                sudo mysql -u root <<SQL
+                sudo mysql -u root >/dev/null <<SQL
 GRANT SUPER ON *.* TO 'orchestrator_integration_user'@'%';
 SQL
             fi
@@ -467,7 +467,7 @@ SQL
         # Some privileges are version-specific
         if [[ "$supports_system_user" == "true" ]]; then
             # MySQL 8.0+ privileges (includes role support)
-            sudo mysql -u root <<SQL
+            sudo mysql -u root >/dev/null <<SQL
 GRANT SELECT ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT UPDATE ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT SELECT ON mysql.role_edges TO 'orchestrator_integration_user'@'%';
@@ -478,7 +478,7 @@ FLUSH PRIVILEGES;
 SQL
         else
             # MySQL 5.x privileges (no role support)
-            sudo mysql -u root <<SQL
+            sudo mysql -u root >/dev/null <<SQL
 GRANT SELECT ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT UPDATE ON mysql.user TO 'orchestrator_integration_user'@'%';
 GRANT RELOAD ON *.* TO 'orchestrator_integration_user'@'%';
@@ -499,12 +499,12 @@ SQL
             echo "Creating app_admin..." >&2
             new_users=true
             if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
-                sudo mysql -u root <<SQL
+                sudo mysql -u root >/dev/null <<SQL
 CREATE USER 'app_admin'@'%' IDENTIFIED BY '$USER1_PASS';
 GRANT ALL PRIVILEGES ON \`$target_db\`.* TO 'app_admin'@'%';
 SQL
             else
-                sudo mysql -u root <<SQL
+                sudo mysql -u root >/dev/null <<SQL
 CREATE USER 'app_admin'@'%' IDENTIFIED BY '$USER1_PASS';
 GRANT ALL PRIVILEGES ON *.* TO 'app_admin'@'%';
 SQL
@@ -518,12 +518,12 @@ SQL
             echo "Creating app_readwrite..." >&2
             new_users=true
             if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
-                sudo mysql -u root <<SQL
+                sudo mysql -u root >/dev/null <<SQL
 CREATE USER 'app_readwrite'@'%' IDENTIFIED BY '$USER2_PASS';
 GRANT SELECT, INSERT, UPDATE, DELETE ON \`$target_db\`.* TO 'app_readwrite'@'%';
 SQL
             else
-                sudo mysql -u root <<SQL
+                sudo mysql -u root >/dev/null <<SQL
 CREATE USER 'app_readwrite'@'%' IDENTIFIED BY '$USER2_PASS';
 GRANT SELECT, INSERT, UPDATE, DELETE ON *.* TO 'app_readwrite'@'%';
 SQL
@@ -537,12 +537,12 @@ SQL
             echo "Creating app_readonly..." >&2
             new_users=true
             if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
-                sudo mysql -u root <<SQL
+                sudo mysql -u root >/dev/null <<SQL
 CREATE USER 'app_readonly'@'%' IDENTIFIED BY '$USER3_PASS';
 GRANT SELECT ON \`$target_db\`.* TO 'app_readonly'@'%';
 SQL
             else
-                sudo mysql -u root <<SQL
+                sudo mysql -u root >/dev/null <<SQL
 CREATE USER 'app_readonly'@'%' IDENTIFIED BY '$USER3_PASS';
 GRANT SELECT ON *.* TO 'app_readonly'@'%';
 SQL
@@ -556,12 +556,12 @@ SQL
             echo "Creating report_user..." >&2
             new_users=true
             if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
-                sudo mysql -u root <<SQL
+                sudo mysql -u root >/dev/null <<SQL
 CREATE USER 'report_user'@'%' IDENTIFIED BY '$USER4_PASS';
 GRANT SELECT, SHOW VIEW ON \`$target_db\`.* TO 'report_user'@'%';
 SQL
             else
-                sudo mysql -u root <<SQL
+                sudo mysql -u root >/dev/null <<SQL
 CREATE USER 'report_user'@'%' IDENTIFIED BY '$USER4_PASS';
 GRANT SELECT, SHOW VIEW ON *.* TO 'report_user'@'%';
 SQL
@@ -575,12 +575,12 @@ SQL
             echo "Creating backup_user..." >&2
             new_users=true
             if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
-                sudo mysql -u root <<SQL
+                sudo mysql -u root >/dev/null <<SQL
 CREATE USER 'backup_user'@'%' IDENTIFIED BY '$USER5_PASS';
 GRANT SELECT, LOCK TABLES, SHOW VIEW, EVENT, TRIGGER ON \`$target_db\`.* TO 'backup_user'@'%';
 SQL
             else
-                sudo mysql -u root <<SQL
+                sudo mysql -u root >/dev/null <<SQL
 CREATE USER 'backup_user'@'%' IDENTIFIED BY '$USER5_PASS';
 GRANT SELECT, LOCK TABLES, SHOW VIEW, EVENT, TRIGGER ON *.* TO 'backup_user'@'%';
 SQL
@@ -588,7 +588,7 @@ SQL
         fi
     fi
 
-    sudo mysql -u root <<SQL
+    sudo mysql -u root >/dev/null <<SQL
 FLUSH PRIVILEGES;
 SQL
 
@@ -646,7 +646,7 @@ create_postgres_users() {
     if [[ "$orch_exists" == "1" ]]; then
         echo "orchestrator_integration_user exists, updating privileges only..." >&2
         if [[ -n "$orch_privileges" ]]; then
-            sudo -u postgres psql <<SQL
+            sudo -u postgres psql >/dev/null <<SQL
 ALTER USER orchestrator_integration_user WITH $orch_privileges;
 SQL
         fi
@@ -654,11 +654,11 @@ SQL
         echo "Creating orchestrator_integration_user..." >&2
         new_users=true
         if [[ -n "$orch_privileges" ]]; then
-            sudo -u postgres psql <<SQL
+            sudo -u postgres psql >/dev/null <<SQL
 CREATE USER orchestrator_integration_user WITH PASSWORD '$ORCH_PASS' $orch_privileges;
 SQL
         else
-            sudo -u postgres psql <<SQL
+            sudo -u postgres psql >/dev/null <<SQL
 CREATE USER orchestrator_integration_user WITH PASSWORD '$ORCH_PASS';
 SQL
         fi
@@ -674,7 +674,7 @@ SQL
         # Version-specific privilege grants
         if [[ "$requires_admin_option" == "true" ]]; then
             # PostgreSQL 16+ requires more explicit privilege management
-            sudo -u postgres psql <<SQL
+            sudo -u postgres psql >/dev/null <<SQL
 GRANT CONNECT ON DATABASE $grant_db TO orchestrator_integration_user;
 GRANT pg_signal_backend TO orchestrator_integration_user;
 GRANT USAGE ON SCHEMA public TO orchestrator_integration_user;
@@ -689,7 +689,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 SQL
         else
             # Pre-16 PostgreSQL versions
-            sudo -u postgres psql <<SQL
+            sudo -u postgres psql >/dev/null <<SQL
 GRANT CONNECT ON DATABASE $grant_db TO orchestrator_integration_user;
 GRANT pg_signal_backend TO orchestrator_integration_user;
 GRANT USAGE ON SCHEMA public TO orchestrator_integration_user;
@@ -716,12 +716,12 @@ SQL
             echo "Creating app_admin..." >&2
             new_users=true
             if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
-                sudo -u postgres psql <<SQL
+                sudo -u postgres psql >/dev/null <<SQL
 CREATE USER app_admin WITH PASSWORD '$USER1_PASS';
 GRANT ALL PRIVILEGES ON DATABASE $grant_db TO app_admin;
 SQL
             else
-                sudo -u postgres psql <<SQL
+                sudo -u postgres psql >/dev/null <<SQL
 CREATE USER app_admin WITH PASSWORD '$USER1_PASS' CREATEDB SUPERUSER;
 SQL
             fi
@@ -733,7 +733,7 @@ SQL
         else
             echo "Creating app_readwrite..." >&2
             new_users=true
-            sudo -u postgres psql <<SQL
+            sudo -u postgres psql >/dev/null <<SQL
 CREATE USER app_readwrite WITH PASSWORD '$USER2_PASS';
 GRANT ALL PRIVILEGES ON DATABASE $grant_db TO app_readwrite;
 SQL
@@ -745,7 +745,7 @@ SQL
         else
             echo "Creating app_readonly..." >&2
             new_users=true
-            sudo -u postgres psql <<SQL
+            sudo -u postgres psql >/dev/null <<SQL
 CREATE USER app_readonly WITH PASSWORD '$USER3_PASS';
 GRANT CONNECT ON DATABASE $grant_db TO app_readonly;
 SQL
@@ -757,7 +757,7 @@ SQL
         else
             echo "Creating report_user..." >&2
             new_users=true
-            sudo -u postgres psql <<SQL
+            sudo -u postgres psql >/dev/null <<SQL
 CREATE USER report_user WITH PASSWORD '$USER4_PASS';
 GRANT CONNECT ON DATABASE $grant_db TO report_user;
 SQL
@@ -770,12 +770,12 @@ SQL
             echo "Creating backup_user..." >&2
             new_users=true
             if [[ "$use_db_scope" == "true" && -n "$target_db" ]]; then
-                sudo -u postgres psql <<SQL
+                sudo -u postgres psql >/dev/null <<SQL
 CREATE USER backup_user WITH PASSWORD '$USER5_PASS';
 GRANT CONNECT ON DATABASE $grant_db TO backup_user;
 SQL
             else
-                sudo -u postgres psql <<SQL
+                sudo -u postgres psql >/dev/null <<SQL
 CREATE USER backup_user WITH PASSWORD '$USER5_PASS' REPLICATION;
 SQL
             fi
@@ -792,7 +792,7 @@ SQL
         else
             echo "Granting ADMIN option on non-superuser roles to orchestrator (best practice)..." >&2
         fi
-        sudo -u postgres psql <<SQL
+        sudo -u postgres psql >/dev/null <<SQL
 DO \$\$
 DECLARE
     role_name TEXT;
