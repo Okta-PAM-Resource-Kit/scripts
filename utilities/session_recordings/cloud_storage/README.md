@@ -1,8 +1,20 @@
 # Session Log Converter Service
 
-**DISCLAIMER:** This is an unsupported, experimental project. It is not intended for production use.
+## Overview
 
-Watches for new OPA session logs and converts them to asciinema (SSH) or MKV (RDP) format, saving to a mounted cloud storage bucket.
+This script watches for new OPA session logs and converts them to asciinema (SSH) or MKV (RDP) format, saving to a mounted cloud storage bucket. It is intended to run as a Linux systemd service.
+
+**_This script is not supported by Okta, is experimental, and is not intended for production use. No warranty is expressed or implied. Please review and understand all scripts before using. Use at your own risk._**
+
+## Capabilities
+
+- Watches `/var/log/sft/sessions` for new session recordings using inotifywait
+- Automatically detects SSH vs RDP sessions based on filename
+- Converts SSH sessions to asciinema `.cast` format for terminal playback
+- Converts RDP sessions to `.mkv` video format
+- Optionally copies raw source files instead of converting
+- Automatic cleanup of source files based on configurable retention period
+- Supports AWS S3, Google Cloud Storage, and Azure Blob Storage destinations
 
 ## Prerequisites
 
