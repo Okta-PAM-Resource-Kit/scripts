@@ -94,16 +94,21 @@ Choose one of the following options to mount cloud storage as a local filesystem
    Attach an IAM role to your EC2 instance with S3 access permissions. No additional configuration needed - s3fs will automatically use the instance metadata service.
    
    ```bash
-   sudo s3fs your-bucket-name /mnt/cloud/sessions \
-       -o iam_role=auto \
+   sudo s3fs {bucket-name} /mnt/cloud/sessions \
        -o allow_other \
-       -o use_path_request_style \
-       -o url=https://s3.amazonaws.com
+       -o iam_role={iam-role-name} \
+       -o endpoint={region} \
+       -o url="https://s3-{region}.amazonaws.com"
    ```
+   
+   Replace:
+   - `{iam-role-name}` - Name of the IAM role attached to the instance
+   - `{region}` - Your bucket's region (e.g., `us-west-2`)
+   - `{bucket-name}` - Your S3 bucket name
    
    For persistent mount, add to `/etc/fstab`:
    ```
-   your-bucket-name /mnt/cloud/sessions fuse.s3fs _netdev,allow_other,iam_role=auto 0 0
+   {bucket-name} /mnt/cloud/sessions fuse.s3fs _netdev,allow_other,iam_role={iam-role-name},endpoint={region},url=https://s3-{region}.amazonaws.com 0 0
    ```
 
    **Option B: IAM Roles Anywhere (recommended for non-AWS environments)**
@@ -129,10 +134,10 @@ Choose one of the following options to mount cloud storage as a local filesystem
       ```
    4. Mount using the profile:
       ```bash
-      AWS_PROFILE=rolesanywhere sudo -E s3fs your-bucket-name /mnt/cloud/sessions \
+      AWS_PROFILE=rolesanywhere sudo -E s3fs {bucket-name} /mnt/cloud/sessions \
           -o allow_other \
-          -o use_path_request_style \
-          -o url=https://s3.amazonaws.com
+          -o endpoint={region} \
+          -o url="https://s3-{region}.amazonaws.com"
       ```
 
    **Option C: Static credentials (last resort)**
@@ -143,16 +148,16 @@ Choose one of the following options to mount cloud storage as a local filesystem
    echo "ACCESS_KEY_ID:SECRET_ACCESS_KEY" > /root/.passwd-s3fs
    chmod 600 /root/.passwd-s3fs
    
-   sudo s3fs your-bucket-name /mnt/cloud/sessions \
+   sudo s3fs {bucket-name} /mnt/cloud/sessions \
        -o passwd_file=/root/.passwd-s3fs \
        -o allow_other \
-       -o use_path_request_style \
-       -o url=https://s3.amazonaws.com
+       -o endpoint={region} \
+       -o url="https://s3-{region}.amazonaws.com"
    ```
    
    For persistent mount, add to `/etc/fstab`:
    ```
-   your-bucket-name /mnt/cloud/sessions fuse.s3fs _netdev,allow_other,passwd_file=/root/.passwd-s3fs 0 0
+   {bucket-name} /mnt/cloud/sessions fuse.s3fs _netdev,allow_other,passwd_file=/root/.passwd-s3fs,endpoint={region},url=https://s3-{region}.amazonaws.com 0 0
    ```
 
 ### Google Cloud Storage (using gcsfuse)
