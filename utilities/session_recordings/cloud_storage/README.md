@@ -29,9 +29,10 @@ sudo systemctl restart sft-gatewayd
 
 ## Installation
 
-1. Copy the script to `/etc/sft/`:
+1. Download and install the script to `/etc/sft/`:
    ```bash
-   sudo cp cloud_sessionlogs.sh /etc/sft/cloud_sessionlogs.sh
+   curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/session_recordings/cloud_storage/cloud_sessionlogs.sh
+   sudo mv cloud_sessionlogs.sh /etc/sft/cloud_sessionlogs.sh
    sudo chown root:root /etc/sft/cloud_sessionlogs.sh
    sudo chmod +x /etc/sft/cloud_sessionlogs.sh
    ```
