@@ -32,6 +32,7 @@ sudo systemctl restart sft-gatewayd
 1. Copy the script to `/etc/sft/`:
    ```bash
    sudo cp cloud_sessionlogs.sh /etc/sft/cloud_sessionlogs.sh
+   sudo chown root:root /etc/sft/cloud_sessionlogs.sh
    sudo chmod +x /etc/sft/cloud_sessionlogs.sh
    ```
 
@@ -118,9 +119,10 @@ Choose one of the following options to mount cloud storage as a local filesystem
    1. Set up a trust anchor and profile in IAM Roles Anywhere
    2. Install the credential helper:
       ```bash
-      wget https://rolesanywhere.amazonaws.com/releases/1.0.5/X86_64/Linux/aws_signing_helper
+      curl -O https://rolesanywhere.amazonaws.com/releases/1.0.5/X86_64/Linux/aws_signing_helper
       chmod +x aws_signing_helper
       sudo mv aws_signing_helper /usr/local/bin/
+      sudo chown root:root /usr/local/bin/aws_signing_helper
       ```
    3. Configure credential process in `~/.aws/config`:
       ```ini
@@ -218,6 +220,7 @@ Choose one of the following options to mount cloud storage as a local filesystem
       ```bash
       sudo mkdir -p /etc/gcsfuse
       sudo mv service-account-key.json /etc/gcsfuse/
+      sudo chown root:root /etc/gcsfuse/service-account-key.json
       sudo chmod 600 /etc/gcsfuse/service-account-key.json
       
       GOOGLE_APPLICATION_CREDENTIALS=/etc/gcsfuse/service-account-key.json \
@@ -234,7 +237,7 @@ Choose one of the following options to mount cloud storage as a local filesystem
 1. Install blobfuse2:
    ```bash
    sudo apt-get install libfuse3-dev fuse3
-   wget https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
+   curl -O https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb
    sudo dpkg -i packages-microsoft-prod.deb
    sudo apt-get update
    sudo apt-get install blobfuse2
