@@ -19,7 +19,8 @@ This script watches for new OPA session logs and converts them to asciinema (SSH
 ## Prerequisites
 
 - `inotify-tools` package installed
-- `sft` CLI installed and configured
+- `scaleft-client-tools` package installed
+- `scaleft-rdp-transcoder` package installed (required for RDP conversion)
 - Cloud storage bucket mounted locally (see below)
 - OPA Gateway configured to include protocol in log filenames (see below)
 
