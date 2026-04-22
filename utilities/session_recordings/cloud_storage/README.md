@@ -9,16 +9,33 @@ Watches for new OPA session logs and converts them to asciinema (SSH) or MKV (RD
 - `inotify-tools` package installed
 - `sft` CLI installed and configured
 - Cloud storage bucket mounted locally (see below)
+- OPA Gateway configured to include protocol in log filenames (see below)
+
+### Gateway Configuration
+
+The script determines recording type (SSH vs RDP) based on the filename. Configure the OPA Gateway to include the protocol in log filenames by adding the following to `/etc/sft/sft-gatewayd.yaml`:
+
+```yaml
+LogFileNameFormats:
+  SSHRecording: "{{.Protocol}}~{{.StartTime}}~{{.TeamName}}~{{.ProjectName}}~{{.ServerName}}~{{.Username}}~"
+  RDPRecording: "{{.Protocol}}~{{.StartTime}}~{{.TeamName}}~{{.ProjectName}}~{{.ServerName}}~{{.Username}}~"
+```
+
+Restart the gateway service to apply changes:
+
+```bash
+sudo systemctl restart sft-gatewayd
+```
 
 ## Installation
 
 1. Copy the script to `/etc/sft/`:
    ```bash
-   sudo cp cloud_convertlogs.sh /etc/sft/cloud_convertlogs.sh
-   sudo chmod +x /etc/sft/cloud_convertlogs.sh
+   sudo cp cloud_sessionlogs.sh /etc/sft/cloud_sessionlogs.sh
+   sudo chmod +x /etc/sft/cloud_sessionlogs.sh
    ```
 
-2. Create the systemd service file at `/etc/systemd/system/session-log-converter.service`:
+2. Create the systemd service file at `/etc/systemd/system/opa-session-log-handler.service`:
    ```ini
    [Unit]
    Description=Watch for new OPA session logs and convert them
@@ -27,11 +44,15 @@ Watches for new OPA session logs and converts them to asciinema (SSH) or MKV (RD
 
    [Service]
    Type=simple
-   ExecStart=/etc/sft/cloud_convertlogs.sh
+   ExecStart=/etc/sft/cloud_sessionlogs.sh
    Restart=always
    RestartSec=5s
    Environment="WATCHPATH=/var/log/sft/sessions"
    Environment="DESTPATH=/mnt/cloud/sessions"
+   Environment="SSH_MODE=convert"
+   Environment="RDP_MODE=convert"
+   Environment="RETENTION_DAYS=30"
+   Environment="CLEANUP_INTERVAL=3600"
 
    [Install]
    WantedBy=multi-user.target
@@ -40,14 +61,14 @@ Watches for new OPA session logs and converts them to asciinema (SSH) or MKV (RD
 3. Enable and start the service:
    ```bash
    sudo systemctl daemon-reload
-   sudo systemctl enable session-log-converter
-   sudo systemctl start session-log-converter
+   sudo systemctl enable opa-session-log-handler
+   sudo systemctl start opa-session-log-handler
    ```
 
 4. Check status:
    ```bash
-   sudo systemctl status session-log-converter
-   sudo journalctl -u session-log-converter -f
+   sudo systemctl status opa-session-log-handler
+   sudo journalctl -u opa-session-log-handler -f
    ```
 
 ## Mounting Cloud Storage
@@ -351,4 +372,8 @@ The script uses environment variables that can be set in the systemd service fil
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `WATCHPATH` | `/var/log/sft/sessions` | Directory to watch for new session logs |
-| `DESTPATH` | `/mnt/cloud/sessions` | Destination for converted files |
+| `DESTPATH` | `/mnt/cloud/sessions` | Destination for output files |
+| `SSH_MODE` | `convert` | SSH processing mode: `convert` (to asciinema .cast) or `copy` (raw source) |
+| `RDP_MODE` | `convert` | RDP processing mode: `convert` (to .mkv) or `copy` (raw source) |
+| `RETENTION_DAYS` | `0` | Days to retain source files before deletion (0 = disabled) |
+| `CLEANUP_INTERVAL` | `3600` | Seconds between cleanup runs (default: 1 hour) |
