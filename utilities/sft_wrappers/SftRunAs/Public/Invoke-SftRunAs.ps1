@@ -141,6 +141,7 @@ Special Commands:
           Write-Host ""
           Write-Host "Password rotation is currently in progress for this account." -ForegroundColor Yellow
           Write-Host "Please wait a few minutes and try again." -ForegroundColor Yellow
+          Read-Host "Press Enter to exit"
           exit 1
         }
         if ($combinedOutput -match 'Sent access request') {
@@ -152,6 +153,7 @@ Special Commands:
             Write-Host "Access request submitted." -ForegroundColor Cyan
           }
           Write-Host "Please wait for approval and try again." -ForegroundColor Yellow
+          Read-Host "Press Enter to exit"
           exit 1
         }
         throw "sft failed (ExitCode: $($p.ExitCode)): $errorOutput"
@@ -182,6 +184,7 @@ Special Commands:
         Write-Host "  - You do not have access to this account" -ForegroundColor Yellow
         Write-Host ""
         Write-Host "Check your OPA dashboard or try again later." -ForegroundColor Yellow
+        Read-Host "Press Enter to exit"
         exit 1
       }
 
