@@ -161,16 +161,16 @@ Special Commands:
   $mmc = Join-Path $env:SystemRoot "System32\mmc.exe"
   $sys32 = Join-Path $env:SystemRoot "System32"
   $Presets = @{
-    aduc     = @{ File=$mmc; Args=@((Join-Path $sys32 "dsa.msc"));      Icon="$sys32\dsadmin.dll,0";            Name="Active Directory Users and Computers" }
-    gpo      = @{ File=$mmc; Args=@((Join-Path $sys32 "gpmc.msc"));     Icon="$sys32\gpoadmin.dll,0";           Name="Group Policy Management" }
-    dns      = @{ File=$mmc; Args=@((Join-Path $sys32 "dnsmgmt.msc")); Icon="$sys32\dnsmgr.dll,0";              Name="DNS Manager" }
-    dhcp     = @{ File=$mmc; Args=@((Join-Path $sys32 "dhcpmgmt.msc")); Icon="$sys32\dhcpssvc.dll,0";           Name="DHCP Manager" }
-    sites    = @{ File=$mmc; Args=@((Join-Path $sys32 "dssite.msc"));   Icon="$sys32\dsadmin.dll,2";            Name="Active Directory Sites and Services" }
-    domains  = @{ File=$mmc; Args=@((Join-Path $sys32 "domain.msc"));   Icon="$sys32\domadmin.dll,0";           Name="Active Directory Domains and Trusts" }
-    adsiedit = @{ File=$mmc; Args=@((Join-Path $sys32 "adsiedit.msc")); Icon="$sys32\adsiedit.dll,0";           Name="ADSI Edit" }
-    certtmpl = @{ File=$mmc; Args=@("certtmpl.msc"); Icon="$sys32\certmgr.dll,0";                               Name="Certificate Templates" }
-    certsrv  = @{ File=$mmc; Args=@("certsrv.msc");  Icon="$sys32\certmgr.dll,0";                               Name="Certification Authority" }
-    pkiview  = @{ File=$mmc; Args=@("pkiview.msc");  Icon="$sys32\certmgr.dll,0";                               Name="Enterprise PKI" }
+    aduc     = @{ File=$mmc; Args=@((Join-Path $sys32 "dsa.msc"));      Icon="$sys32\dsadmin.dll,0";            Name="Active Directory Users and Computers"; Rsat="Rsat.ActiveDirectory.DS-LDS.Tools" }
+    gpo      = @{ File=$mmc; Args=@((Join-Path $sys32 "gpmc.msc"));     Icon="$sys32\gpoadmin.dll,0";           Name="Group Policy Management";              Rsat="Rsat.GroupPolicy.Management.Tools" }
+    dns      = @{ File=$mmc; Args=@((Join-Path $sys32 "dnsmgmt.msc")); Icon="$sys32\dnsmgr.dll,0";              Name="DNS Manager";                          Rsat="Rsat.Dns.Tools" }
+    dhcp     = @{ File=$mmc; Args=@((Join-Path $sys32 "dhcpmgmt.msc")); Icon="$sys32\dhcpssvc.dll,0";           Name="DHCP Manager";                         Rsat="Rsat.DHCP.Tools" }
+    sites    = @{ File=$mmc; Args=@((Join-Path $sys32 "dssite.msc"));   Icon="$sys32\dsadmin.dll,2";            Name="Active Directory Sites and Services";  Rsat="Rsat.ActiveDirectory.DS-LDS.Tools" }
+    domains  = @{ File=$mmc; Args=@((Join-Path $sys32 "domain.msc"));   Icon="$sys32\domadmin.dll,0";           Name="Active Directory Domains and Trusts";  Rsat="Rsat.ActiveDirectory.DS-LDS.Tools" }
+    adsiedit = @{ File=$mmc; Args=@((Join-Path $sys32 "adsiedit.msc")); Icon="$sys32\adsiedit.dll,0";           Name="ADSI Edit";                            Rsat="Rsat.ActiveDirectory.DS-LDS.Tools" }
+    certtmpl = @{ File=$mmc; Args=@("certtmpl.msc"); Icon="$sys32\certmgr.dll,0";                               Name="Certificate Templates";                Rsat="Rsat.CertificateServices.Tools" }
+    certsrv  = @{ File=$mmc; Args=@("certsrv.msc");  Icon="$sys32\certmgr.dll,0";                               Name="Certification Authority";              Rsat="Rsat.CertificateServices.Tools" }
+    pkiview  = @{ File=$mmc; Args=@("pkiview.msc");  Icon="$sys32\certmgr.dll,0";                               Name="Enterprise PKI";                       Rsat="Rsat.CertificateServices.Tools" }
     compmgmt = @{ File=$mmc; Args=@((Join-Path $sys32 "compmgmt.msc")); Icon="$sys32\mycomput.dll,0";           Name="Computer Management" }
     eventvwr = @{ File=$mmc; Args=@((Join-Path $sys32 "eventvwr.msc")); Icon="$sys32\eventvwr.exe,0";           Name="Event Viewer" }
     services = @{ File=$mmc; Args=@("services.msc"); Icon="$sys32\filemgmt.dll,0";                              Name="Services" }
@@ -225,6 +225,7 @@ Special Commands:
 
     $createdCount = 0
     $skippedCount = 0
+    $missingRsat = @{}
 
     foreach ($preset in $Presets.GetEnumerator() | Sort-Object Name) {
       $toolName = $preset.Name
@@ -247,6 +248,9 @@ Special Commands:
       if (-not $isAvailable) {
         Write-Host "Skipped: $displayName (not installed)" -ForegroundColor Yellow
         $skippedCount++
+        if ($toolInfo.Rsat) {
+          $missingRsat[$toolInfo.Rsat] = $true
+        }
         continue
       }
 
@@ -270,8 +274,13 @@ Special Commands:
 
     Write-Host ""
     Write-Host "Done. Created $createdCount shortcut(s), skipped $skippedCount." -ForegroundColor Cyan
-    if ($skippedCount -gt 0) {
-      Write-Host "Tip: Install RSAT to enable additional AD/DNS/DHCP tools." -ForegroundColor Yellow
+
+    if ($missingRsat.Count -gt 0) {
+      Write-Host ""
+      Write-Host "To install missing tools, run as Administrator:" -ForegroundColor Yellow
+      foreach ($rsat in ($missingRsat.Keys | Sort-Object)) {
+        Write-Host "  Add-WindowsCapability -Online -Name $rsat~~~~0.0.1.0" -ForegroundColor Cyan
+      }
     }
     return
   }
@@ -299,6 +308,7 @@ Special Commands:
     Write-Host "Tool Availability" -ForegroundColor Cyan
     $available = @()
     $unavailable = @()
+    $missingRsat = @{}
     foreach ($preset in $Presets.GetEnumerator() | Sort-Object Name) {
       $toolName = $preset.Name
       $toolInfo = $preset.Value
@@ -318,6 +328,9 @@ Special Commands:
         $available += $toolName
       } else {
         $unavailable += $toolName
+        if ($toolInfo.Rsat) {
+          $missingRsat[$toolInfo.Rsat] = $true
+        }
       }
     }
 
@@ -327,8 +340,14 @@ Special Commands:
     if ($unavailable.Count -gt 0) {
       Write-Host "  Unavailable ($($unavailable.Count)):" -ForegroundColor Yellow
       $unavailable | ForEach-Object { Write-Host "    $_" }
-      Write-Host ""
-      Write-Host "  Tip: Install RSAT to enable AD/DNS/DHCP tools" -ForegroundColor Yellow
+
+      if ($missingRsat.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  To install missing tools, run as Administrator:" -ForegroundColor Yellow
+        foreach ($rsat in ($missingRsat.Keys | Sort-Object)) {
+          Write-Host "    Add-WindowsCapability -Online -Name $rsat~~~~0.0.1.0" -ForegroundColor Cyan
+        }
+      }
     }
 
     return
