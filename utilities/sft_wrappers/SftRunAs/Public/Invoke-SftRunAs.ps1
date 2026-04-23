@@ -16,6 +16,8 @@ function Invoke-SftRunAs {
     [string]$ComputerName,   # doctor only
     [switch]$VerboseDoctor,
 
+    [string]$Folder,         # create-shortcuts only
+
     [switch]$Wait,
     [switch]$PassThru
   )
@@ -31,7 +33,7 @@ using just-in-time credentials from Okta Privileged Access.
 Usage:
   sft-runas <account> <tool> [tool_args]
   sft-runas list-tools
-  sft-runas create-shortcuts <account>
+  sft-runas create-shortcuts <account> [-Folder <name>]
   sft-runas doctor [-ComputerName <target>]
 
 Arguments:
@@ -42,6 +44,7 @@ Arguments:
 Special Commands:
   list-tools     Show available tool presets.
   create-shortcuts Create desktop shortcuts for all tool presets.
+                 Use -Folder to place shortcuts in a desktop subfolder.
   doctor         Run diagnostic checks.
 
 "@
@@ -190,9 +193,18 @@ Special Commands:
     }
     $account = $Tool
     $desktopPath = [System.Environment]::GetFolderPath('Desktop')
+
+    if ($Folder) {
+      $desktopPath = Join-Path $desktopPath $Folder
+      if (-not (Test-Path $desktopPath)) {
+        New-Item -ItemType Directory -Path $desktopPath -Force | Out-Null
+      }
+    }
+
     $wshShell = New-Object -ComObject WScript.Shell
 
-    Write-Host "Creating shortcuts on your desktop for account '$account'..." -ForegroundColor Cyan
+    $location = if ($Folder) { "desktop folder '$Folder'" } else { "desktop" }
+    Write-Host "Creating shortcuts on your $location for account '$account'..." -ForegroundColor Cyan
 
     foreach ($preset in $Presets.GetEnumerator() | Sort-Object Name) {
       $toolName = $preset.Name
