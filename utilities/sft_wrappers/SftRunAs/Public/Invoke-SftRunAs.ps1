@@ -131,7 +131,22 @@ Special Commands:
       $output = $p.StandardOutput.ReadToEnd()
       $errorOutput = $p.StandardError.ReadToEnd()
 
-      if ($p.ExitCode -ne 0) { throw "sft failed (ExitCode: $($p.ExitCode)): $errorOutput" }
+      if ($p.ExitCode -ne 0) {
+        # Check for known error conditions and provide friendly messages
+        if ($errorOutput -match 'password rotation in progress') {
+          Write-Host ""
+          Write-Host "Password rotation is currently in progress for this account." -ForegroundColor Yellow
+          Write-Host "Please wait a few minutes and try again." -ForegroundColor Yellow
+          exit 1
+        }
+        if ($output -match 'Sent access request.*Request ID:\s*(\S+)') {
+          Write-Host ""
+          Write-Host "Access request submitted. Request ID: $($Matches[1])" -ForegroundColor Cyan
+          Write-Host "Please wait for approval and try again." -ForegroundColor Yellow
+          exit 1
+        }
+        throw "sft failed (ExitCode: $($p.ExitCode)): $errorOutput"
+      }
       return ($output -split "`r?`n")
     } finally {
       $p.Dispose()
