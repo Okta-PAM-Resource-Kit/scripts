@@ -197,7 +197,7 @@ Special Commands:
     foreach ($preset in $Presets.GetEnumerator() | Sort-Object Name) {
       $toolName = $preset.Name
       $toolInfo = $preset.Value
-      $shortcutName = "SftRunAs - $toolName"
+      $shortcutName = "$toolName (SftRunAs)"
       $shortcutPath = Join-Path $desktopPath "$shortcutName.lnk"
 
       $psExe = Get-Command pwsh
