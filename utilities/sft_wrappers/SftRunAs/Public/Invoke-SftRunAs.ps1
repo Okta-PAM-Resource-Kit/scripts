@@ -133,16 +133,19 @@ Special Commands:
       $errorOutput = $p.StandardError.ReadToEnd()
 
       if ($p.ExitCode -ne 0) {
+        # Combine output for checking (message may be in stdout or stderr)
+        $combinedOutput = "$output`n$errorOutput"
+
         # Check for known error conditions and provide friendly messages
-        if ($errorOutput -match 'password rotation in progress') {
+        if ($combinedOutput -match 'password rotation in progress') {
           Write-Host ""
           Write-Host "Password rotation is currently in progress for this account." -ForegroundColor Yellow
           Write-Host "Please wait a few minutes and try again." -ForegroundColor Yellow
           exit 1
         }
-        if ($output -match 'Sent access request') {
+        if ($combinedOutput -match 'Sent access request') {
           Write-Host ""
-          $requestIdMatch = [regex]::Match($output, 'Request ID:\s*(\S+)')
+          $requestIdMatch = [regex]::Match($combinedOutput, 'Request ID:\s*(\S+)')
           if ($requestIdMatch.Success) {
             Write-Host "Access request submitted. Request ID: $($requestIdMatch.Groups[1].Value)" -ForegroundColor Cyan
           } else {
@@ -168,7 +171,21 @@ Special Commands:
       Invoke-Sft -MyArgs (@("login") + $teamArgs) | Out-Null
       Write-Host "Retrieving credentials for $AdUsername@$AdDomainFqdn..." -ForegroundColor Cyan
       $out = Invoke-Sft -MyArgs (@("ad","reveal","--domain",$AdDomainFqdn,"--ad-account",$AdUsername) + $teamArgs)
-      $pw = ($out | Where-Object { $_ -and $_.Trim().Length -gt 0 -and $_ -notmatch 'PASSWORD\s+ACCOUNT' -and $_ -notmatch 'Session expires' } | Select-Object -First 1).Split(' ')[0]
+
+      # Filter output to find the password line
+      $pwLine = $out | Where-Object { $_ -and $_.Trim().Length -gt 0 -and $_ -notmatch 'PASSWORD\s+ACCOUNT' -and $_ -notmatch 'Session expires' } | Select-Object -First 1
+
+      if (-not $pwLine) {
+        Write-Host ""
+        Write-Host "No password returned. This may indicate:" -ForegroundColor Yellow
+        Write-Host "  - An access request was submitted and is awaiting approval" -ForegroundColor Yellow
+        Write-Host "  - You do not have access to this account" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "Check your OPA dashboard or try again later." -ForegroundColor Yellow
+        exit 1
+      }
+
+      $pw = $pwLine.Split(' ')[0]
 
       if (-not $pw) { throw "OPA did not return a password for $AdDomainFqdn\$AdUsername." }
 
