@@ -458,7 +458,15 @@ Special Commands:
     $command = "Start-Process -FilePath '$launchFile' -ArgumentList (([System.Text.Encoding]::Unicode.GetString([System.Convert]::FromBase64String('$encodedArgs'))) | ConvertFrom-Csv -Header 'Arg' | Select-Object -ExpandProperty 'Arg') -Verb RunAs"
 
     Write-Host "Launching $Tool with elevated privileges..." -ForegroundColor Cyan
-    $p = Start-Process -FilePath "pwsh.exe" -ArgumentList "-NoProfile", "-Command", $command -Credential $cred -WindowStyle Hidden -PassThru
+    try {
+      $p = Start-Process -FilePath "pwsh.exe" -ArgumentList "-NoProfile", "-Command", $command -Credential $cred -WindowStyle Hidden -PassThru
+    } catch {
+      if ($_.Exception.Message -match 'user name or password is incorrect') {
+        Exit-WithMessage "Authentication failed. The password may have been rotated or is incorrect.`nTry again to retrieve fresh credentials from OPA."
+        return
+      }
+      throw
+    }
 
     if ($Wait) { $p.WaitForExit() | Out-Null }
     if ($PassThru) { $p }
