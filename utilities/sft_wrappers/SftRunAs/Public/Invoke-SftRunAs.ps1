@@ -189,7 +189,6 @@ Special Commands:
     }
     $account = $Tool
     $desktopPath = [System.Environment]::GetFolderPath('Desktop')
-    $scriptPath = $MyInvocation.MyCommand.Path
     $wshShell = New-Object -ComObject WScript.Shell
 
     Write-Host "Creating shortcuts on your desktop for account '$account'..." -ForegroundColor Cyan
@@ -203,9 +202,9 @@ Special Commands:
       $psExe = Get-Command pwsh
       $shortcut = $wshShell.CreateShortcut($shortcutPath)
       $shortcut.TargetPath = $psExe.Source
-      $shortcut.Arguments = "-NoProfile -File `"$scriptPath`" -RunAs '$account' -Tool '$toolName'"
+      $shortcut.Arguments = "-NoProfile -Command `"Import-Module SftRunAs; sft-runas '$account' '$toolName'`""
       $shortcut.Description = "Run $toolName as $account via Okta Privileged Access"
-      
+
       if ($toolInfo.File -eq $mmc) {
         $shortcut.IconLocation = $toolInfo.Args[0] # .msc file
       } else {
