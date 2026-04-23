@@ -165,8 +165,8 @@ Special Commands:
     gpo      = @{ File=$mmc; Args=@((Join-Path $sys32 "gpmc.msc"));     Icon="$sys32\gpoadmin.dll,0";           Name="Group Policy Management" }
     dns      = @{ File=$mmc; Args=@((Join-Path $sys32 "dnsmgmt.msc")); Icon="$sys32\dnsmgr.dll,0";              Name="DNS Manager" }
     dhcp     = @{ File=$mmc; Args=@((Join-Path $sys32 "dhcpmgmt.msc")); Icon="$sys32\dhcpssvc.dll,0";           Name="DHCP Manager" }
-    sites    = @{ File=$mmc; Args=@((Join-Path $sys32 "dssite.msc"));   Icon="$sys32\dsadmin.dll,0";            Name="Active Directory Sites and Services" }
-    domains  = @{ File=$mmc; Args=@((Join-Path $sys32 "domain.msc"));   Icon="$sys32\dsadmin.dll,0";            Name="Active Directory Domains and Trusts" }
+    sites    = @{ File=$mmc; Args=@((Join-Path $sys32 "dssite.msc"));   Icon="$sys32\dssite.dll,0";             Name="Active Directory Sites and Services" }
+    domains  = @{ File=$mmc; Args=@((Join-Path $sys32 "domain.msc"));   Icon="$sys32\domadmin.dll,0";           Name="Active Directory Domains and Trusts" }
     adsiedit = @{ File=$mmc; Args=@((Join-Path $sys32 "adsiedit.msc")); Icon="$sys32\adsiedit.dll,0";           Name="ADSI Edit" }
     certtmpl = @{ File=$mmc; Args=@("certtmpl.msc"); Icon="$sys32\certmgr.dll,0";                               Name="Certificate Templates" }
     certsrv  = @{ File=$mmc; Args=@("certsrv.msc");  Icon="$sys32\certmgr.dll,0";                               Name="Certification Authority" }
