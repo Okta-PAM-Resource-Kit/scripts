@@ -100,12 +100,12 @@ Special Commands:
     try {
       $p.Start() | Out-Null
 
-      # Wait for the process to exit, with a 10-second timeout.
-      if (-not ($p.WaitForExit(10000))) {
+      # Wait for the process to exit, with a 120-second timeout.
+      if (-not ($p.WaitForExit(120000))) {
         # If the process is still running after the timeout, assume it's waiting for input.
         $p.Kill()
         $partialOutput = $p.StandardOutput.ReadToEnd()
-        $errorMessage = "sft command timed out after 10 seconds, likely waiting for interactive input. Please run 'sft $MyArgs' manually to resolve the ambiguity."
+        $errorMessage = "sft command timed out after 120 seconds, likely waiting for interactive input. Please run 'sft $MyArgs' manually to resolve the ambiguity."
         Write-Host $errorMessage -ForegroundColor Yellow
         exit 1
       }
@@ -126,7 +126,9 @@ Special Commands:
     if ($Team) { $teamArgs += @("--team",$Team) }
 
     try {
+      Write-Host "Authenticating with Okta Privileged Access..." -ForegroundColor Cyan
       Invoke-Sft -MyArgs (@("login") + $teamArgs) | Out-Null
+      Write-Host "Retrieving credentials for $AdUsername@$AdDomainFqdn..." -ForegroundColor Cyan
       $out = Invoke-Sft -MyArgs (@("ad","reveal","--domain",$AdDomainFqdn,"--ad-account",$AdUsername) + $teamArgs)
       $pw = ($out | Where-Object { $_ -and $_.Trim().Length -gt 0 -and $_ -notmatch 'PASSWORD\s+ACCOUNT' -and $_ -notmatch 'Session expires' } | Select-Object -First 1).Split(' ')[0]
 
@@ -277,6 +279,7 @@ Special Commands:
 
   try {
     $secure = Get-OpaAdPasswordSecure -AdDomainFqdn $AdDomainFqdn -AdUsername $($id.User) -Team $Team
+    Write-Host "Credentials retrieved successfully." -ForegroundColor Green
     $cred   = [pscredential]::new($logonName, $secure)
 
     # Start-Process cannot use -Credential and -Verb RunAs together.
@@ -284,7 +287,8 @@ Special Commands:
     # and from within that process, launch the target tool with elevation.
     $encodedArgs = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($launchArgs))
     $command = "Start-Process -FilePath '$launchFile' -ArgumentList (([System.Text.Encoding]::Unicode.GetString([System.Convert]::FromBase64String('$encodedArgs'))) | ConvertFrom-Csv -Header 'Arg' | Select-Object -ExpandProperty 'Arg') -Verb RunAs"
-    
+
+    Write-Host "Launching $Tool with elevated privileges..." -ForegroundColor Cyan
     $p = Start-Process -FilePath "pwsh.exe" -ArgumentList "-NoProfile", "-Command", $command -Credential $cred -WindowStyle Hidden -PassThru
 
     if ($Wait) { $p.WaitForExit() | Out-Null }
