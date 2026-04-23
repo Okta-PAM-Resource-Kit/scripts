@@ -29,7 +29,7 @@ No passwords are stored on disk. Credentials are retrieved at runtime, used to c
 ### Required
 
 - Windows 10/11 **Pro, Enterprise, or Education**
-- Okta Privileged Access client (`sft`) installed and enrolled
+- Okta Privileged Access client (`sft`) **v1.101.2 or later**, installed and enrolled
 - Access to an OPA-managed **Active Directory account**
 - PowerShell 5.1 or later (PowerShell 7+ supported)
 

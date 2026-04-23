@@ -64,6 +64,18 @@ Special Commands:
     }
   }
 
+  function Require-SftVersion([version]$MinVersion) {
+    $versionOutput = & sft version 2>&1
+    if ($versionOutput -match 'Version:\s*(\d+\.\d+\.\d+)') {
+      $currentVersion = [version]$Matches[1]
+      if ($currentVersion -lt $MinVersion) {
+        throw "sft version $currentVersion is installed, but version $MinVersion or later is required. Please update the Okta Privileged Access client."
+      }
+    } else {
+      Write-Host "Warning: Could not determine sft version. Minimum required: $MinVersion" -ForegroundColor Yellow
+    }
+  }
+
   function Parse-Identity([string]$IdentityString) {
     if ($IdentityString -match '^(?<usr>[^@]+)@(?<dom>.+)$') {
       return [pscustomobject]@{ User=$Matches.usr; UPN=$Matches.dom; Raw=$IdentityString }
@@ -287,6 +299,7 @@ Special Commands:
 
   if ($RunAs.ToLowerInvariant() -eq "doctor") {
     Require-Command "sft"
+    Require-SftVersion "1.101.2"
 
     Write-Host "Environment" -ForegroundColor Cyan
     Write-Host "  sft path:        $((Get-Command sft).Source)"
@@ -355,7 +368,8 @@ Special Commands:
 
   # Main execution
   Require-Command "sft"
-  
+  Require-SftVersion "1.101.2"
+
   Write-Host "Attempting to run '$Tool' as '$RunAs'..." -ForegroundColor Cyan
 
   $id = Parse-Identity -IdentityString $RunAs
