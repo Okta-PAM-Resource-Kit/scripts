@@ -41,35 +41,67 @@ No passwords are stored on disk. Credentials are retrieved at runtime, used to c
 
 ## Installation
 
-### Install the module
-
-Copy the `SftRunAs` folder to one of the following locations:
-
-**Per-user**
-
-```
-$HOME\Documents\PowerShell\Modules\SftRunAs
-```
-
-**All users**
-
-```
-C:\Program Files\PowerShell\Modules\SftRunAs
-```
-
-If the files were downloaded from the internet, unblock them:
+### Option 1: Per-user installation (recommended)
 
 ```powershell
-Get-ChildItem SftRunAs -Recurse | Unblock-File
+# Create module directories
+$modulePath = "$HOME\Documents\PowerShell\Modules\SftRunAs"
+New-Item -ItemType Directory -Path "$modulePath\Public" -Force
+
+# Download module files from GitHub
+$baseUrl = "https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/sft_wrappers/SftRunAs"
+Invoke-WebRequest "$baseUrl/SftRunAs.psd1" -OutFile "$modulePath\SftRunAs.psd1"
+Invoke-WebRequest "$baseUrl/SftRunAs.psm1" -OutFile "$modulePath\SftRunAs.psm1"
+Invoke-WebRequest "$baseUrl/Public/Invoke-SftRunAs.ps1" -OutFile "$modulePath\Public\Invoke-SftRunAs.ps1"
+
+# Unblock files (required for files downloaded from the internet)
+Get-ChildItem $modulePath -Recurse | Unblock-File
+
+# Import the module
+Import-Module SftRunAs
+
+# Verify installation
+Get-Command sft-runas
 ```
 
-Import the module:
+### Option 2: All users installation (requires admin)
 
 ```powershell
+# Run PowerShell as Administrator
+
+# Create module directories
+$modulePath = "C:\Program Files\PowerShell\Modules\SftRunAs"
+New-Item -ItemType Directory -Path "$modulePath\Public" -Force
+
+# Download module files from GitHub
+$baseUrl = "https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/sft_wrappers/SftRunAs"
+Invoke-WebRequest "$baseUrl/SftRunAs.psd1" -OutFile "$modulePath\SftRunAs.psd1"
+Invoke-WebRequest "$baseUrl/SftRunAs.psm1" -OutFile "$modulePath\SftRunAs.psm1"
+Invoke-WebRequest "$baseUrl/Public/Invoke-SftRunAs.ps1" -OutFile "$modulePath\Public\Invoke-SftRunAs.ps1"
+
+# Unblock files (required for files downloaded from the internet)
+Get-ChildItem $modulePath -Recurse | Unblock-File
+
+# Import the module
+Import-Module SftRunAs
+
+# Verify installation
+Get-Command sft-runas
+```
+
+### Auto-load on startup (optional)
+
+Add to your PowerShell profile to load automatically:
+
+```powershell
+# Open your profile for editing
+notepad $PROFILE
+
+# Add this line to the profile:
 Import-Module SftRunAs
 ```
 
-The command `sft-runas` will now be available.
+The command `sft-runas` will now be available in all new PowerShell sessions.
 
 ---
 
