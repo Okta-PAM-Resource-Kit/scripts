@@ -65,9 +65,10 @@ Special Commands:
   }
 
   function Require-SftVersion([version]$MinVersion) {
-    $versionOutput = & sft version 2>&1
-    if ($versionOutput -match 'Version:\s*(\d+\.\d+\.\d+)') {
-      $currentVersion = [version]$Matches[1]
+    $versionOutput = (& sft version 2>&1) -join "`n"
+    $versionMatch = [regex]::Match($versionOutput, 'Version:\s*(\d+\.\d+\.\d+)')
+    if ($versionMatch.Success) {
+      $currentVersion = [version]$versionMatch.Groups[1].Value
       if ($currentVersion -lt $MinVersion) {
         throw "sft version $currentVersion is installed, but version $MinVersion or later is required. Please update the Okta Privileged Access client."
       }
@@ -141,8 +142,9 @@ Special Commands:
         }
         if ($output -match 'Sent access request') {
           Write-Host ""
-          if ($output -match 'Request ID:\s*(\S+)') {
-            Write-Host "Access request submitted. Request ID: $($Matches[1])" -ForegroundColor Cyan
+          $requestIdMatch = [regex]::Match($output, 'Request ID:\s*(\S+)')
+          if ($requestIdMatch.Success) {
+            Write-Host "Access request submitted. Request ID: $($requestIdMatch.Groups[1].Value)" -ForegroundColor Cyan
           } else {
             Write-Host "Access request submitted." -ForegroundColor Cyan
           }
