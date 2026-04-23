@@ -103,6 +103,14 @@ Import-Module SftRunAs
 
 The command `sft-runas` will now be available in all new PowerShell sessions.
 
+### Reload after updating
+
+To reload the module after updating files:
+
+```powershell
+Import-Module SftRunAs -Force
+```
+
 ---
 
 ## Installing RSAT (Required for AD / DNS / GPO Tools)
