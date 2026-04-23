@@ -154,27 +154,28 @@ Special Commands:
   }
 
   $mmc = Join-Path $env:SystemRoot "System32\mmc.exe"
+  $sys32 = Join-Path $env:SystemRoot "System32"
   $Presets = @{
-    aduc     = @{ File=$mmc; Args=@((Join-Path $env:SystemRoot "System32\dsa.msc")) }
-    gpo      = @{ File=$mmc; Args=@((Join-Path $env:SystemRoot "System32\gpmc.msc")) }
-    dns      = @{ File=$mmc; Args=@((Join-Path $env:SystemRoot "System32\dnsmgmt.msc")) }
-    dhcp     = @{ File=$mmc; Args=@((Join-Path $env:SystemRoot "System32\dhcpmgmt.msc")) }
-    sites    = @{ File=$mmc; Args=@((Join-Path $env:SystemRoot "System32\dssite.msc")) }
-    domains  = @{ File=$mmc; Args=@((Join-Path $env:SystemRoot "System32\domain.msc")) }
-    adsiedit = @{ File=$mmc; Args=@((Join-Path $env:SystemRoot "System32\adsiedit.msc")) }
-    certtmpl = @{ File=$mmc; Args=@("certtmpl.msc") }
-    certsrv  = @{ File=$mmc; Args=@("certsrv.msc") }
-    pkiview  = @{ File=$mmc; Args=@("pkiview.msc") }
-    compmgmt = @{ File=$mmc; Args=@((Join-Path $env:SystemRoot "System32\compmgmt.msc")) }
-    eventvwr = @{ File=$mmc; Args=@((Join-Path $env:SystemRoot "System32\eventvwr.msc")) }
-    services = @{ File=$mmc; Args=@("services.msc") }
-    taskschd = @{ File=$mmc; Args=@("taskschd.msc") }
-    diskmgmt = @{ File=$mmc; Args=@("diskmgmt.msc") }
-    wf       = @{ File=$mmc; Args=@("wf.msc") }
-    regedit  = @{ File="regedit.exe"; Args=@() }
-    control  = @{ File="control.exe"; Args=@() }
-    pwsh     = @{ File="pwsh.exe"; Args=@("-NoExit") }
-    powershell = @{ File="powershell.exe"; Args=@("-NoExit") }
+    aduc     = @{ File=$mmc; Args=@((Join-Path $sys32 "dsa.msc"));      Icon="$sys32\dsadmin.dll,0" }
+    gpo      = @{ File=$mmc; Args=@((Join-Path $sys32 "gpmc.msc"));     Icon="$sys32\gpmgmt.dll,0" }
+    dns      = @{ File=$mmc; Args=@((Join-Path $sys32 "dnsmgmt.msc")); Icon="$sys32\dnsmgr.dll,0" }
+    dhcp     = @{ File=$mmc; Args=@((Join-Path $sys32 "dhcpmgmt.msc")); Icon="$sys32\dhcpsnap.dll,0" }
+    sites    = @{ File=$mmc; Args=@((Join-Path $sys32 "dssite.msc"));   Icon="$sys32\dsadmin.dll,0" }
+    domains  = @{ File=$mmc; Args=@((Join-Path $sys32 "domain.msc"));   Icon="$sys32\dsadmin.dll,0" }
+    adsiedit = @{ File=$mmc; Args=@((Join-Path $sys32 "adsiedit.msc")); Icon="$sys32\adsiedit.dll,0" }
+    certtmpl = @{ File=$mmc; Args=@("certtmpl.msc"); Icon="$sys32\certmgr.dll,0" }
+    certsrv  = @{ File=$mmc; Args=@("certsrv.msc");  Icon="$sys32\certmgr.dll,0" }
+    pkiview  = @{ File=$mmc; Args=@("pkiview.msc");  Icon="$sys32\certmgr.dll,0" }
+    compmgmt = @{ File=$mmc; Args=@((Join-Path $sys32 "compmgmt.msc")); Icon="$sys32\mycomput.dll,0" }
+    eventvwr = @{ File=$mmc; Args=@((Join-Path $sys32 "eventvwr.msc")); Icon="$sys32\eventvwr.exe,0" }
+    services = @{ File=$mmc; Args=@("services.msc"); Icon="$sys32\filemgmt.dll,0" }
+    taskschd = @{ File=$mmc; Args=@("taskschd.msc"); Icon="$sys32\mstask.dll,0" }
+    diskmgmt = @{ File=$mmc; Args=@("diskmgmt.msc"); Icon="$sys32\dmdskres.dll,0" }
+    wf       = @{ File=$mmc; Args=@("wf.msc");       Icon="$sys32\wfres.dll,0" }
+    regedit  = @{ File="regedit.exe"; Args=@();      Icon="$sys32\regedit.exe,0" }
+    control  = @{ File="control.exe"; Args=@();      Icon="$sys32\control.exe,0" }
+    pwsh     = @{ File="pwsh.exe"; Args=@("-NoExit"); Icon="" }
+    powershell = @{ File="powershell.exe"; Args=@("-NoExit"); Icon="" }
   }
 
   # Commands that don't need credentials
@@ -206,10 +207,8 @@ Special Commands:
       $shortcut.WorkingDirectory = $env:USERPROFILE
       $shortcut.Description = "Run $toolName as $account via Okta Privileged Access"
 
-      if ($toolInfo.File -eq $mmc) {
-        $shortcut.IconLocation = $toolInfo.Args[0] # .msc file
-      } else {
-        $shortcut.IconLocation = $toolInfo.File # .exe file
+      if ($toolInfo.Icon) {
+        $shortcut.IconLocation = $toolInfo.Icon
       }
       $shortcut.Save()
       Write-Host "Created shortcut: $shortcutName"
@@ -219,22 +218,59 @@ Special Commands:
 
   if ($RunAs.ToLowerInvariant() -eq "doctor") {
     Require-Command "sft"
-    $result = [ordered]@{
-      SftPath         = (Get-Command sft).Source
-      UserDnsDomain   = $env:USERDNSDOMAIN
-      MmcPath         = $mmc
-      MmcExists       = (Test-Path $mmc)
-      ToolPresetCount = $Presets.Count
-    }
+
+    Write-Host "Environment" -ForegroundColor Cyan
+    Write-Host "  sft path:        $((Get-Command sft).Source)"
+    Write-Host "  User DNS domain: $($env:USERDNSDOMAIN)"
+    Write-Host "  MMC path:        $mmc"
+    Write-Host "  MMC exists:      $(Test-Path $mmc)"
+    Write-Host ""
 
     if ($ComputerName) {
-      $result.RemoteTarget = $ComputerName
-      try { [System.Net.Dns]::GetHostAddresses($ComputerName) | Out-Null; $result.DnsResolves = $true } catch { $result.DnsResolves = $false }
-      $result.WinRM5985 = (Test-TcpPort -Host $ComputerName -Port 5985)
-      $result.WinRM5986 = (Test-TcpPort -Host $ComputerName -Port 5986)
+      Write-Host "Remote Target: $ComputerName" -ForegroundColor Cyan
+      $dnsResolves = $false
+      try { [System.Net.Dns]::GetHostAddresses($ComputerName) | Out-Null; $dnsResolves = $true } catch {}
+      Write-Host "  DNS resolves: $dnsResolves"
+      Write-Host "  WinRM 5985:   $(Test-TcpPort -Host $ComputerName -Port 5985)"
+      Write-Host "  WinRM 5986:   $(Test-TcpPort -Host $ComputerName -Port 5986)"
+      Write-Host ""
     }
 
-    if ($VerboseDoctor) { $result } else { [pscustomobject]$result }
+    Write-Host "Tool Availability" -ForegroundColor Cyan
+    $available = @()
+    $unavailable = @()
+    foreach ($preset in $Presets.GetEnumerator() | Sort-Object Name) {
+      $toolName = $preset.Name
+      $toolInfo = $preset.Value
+
+      $isAvailable = $false
+      if ($toolInfo.File -eq $mmc) {
+        $mscPath = $toolInfo.Args[0]
+        if ($mscPath -notmatch '^[A-Z]:\\' -and $mscPath -notmatch '^\\\\') {
+          $mscPath = Join-Path $sys32 $mscPath
+        }
+        $isAvailable = Test-Path $mscPath
+      } else {
+        $isAvailable = $null -ne (Get-Command $toolInfo.File -ErrorAction SilentlyContinue)
+      }
+
+      if ($isAvailable) {
+        $available += $toolName
+      } else {
+        $unavailable += $toolName
+      }
+    }
+
+    Write-Host "  Available ($($available.Count)):" -ForegroundColor Green
+    $available | ForEach-Object { Write-Host "    $_" }
+
+    if ($unavailable.Count -gt 0) {
+      Write-Host "  Unavailable ($($unavailable.Count)):" -ForegroundColor Yellow
+      $unavailable | ForEach-Object { Write-Host "    $_" }
+      Write-Host ""
+      Write-Host "  Tip: Install RSAT to enable AD/DNS/DHCP tools" -ForegroundColor Yellow
+    }
+
     return
   }
 
