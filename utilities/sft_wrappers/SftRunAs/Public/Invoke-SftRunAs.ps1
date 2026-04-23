@@ -203,6 +203,7 @@ Special Commands:
       $shortcut = $wshShell.CreateShortcut($shortcutPath)
       $shortcut.TargetPath = $psExe.Source
       $shortcut.Arguments = "-NoProfile -Command `"Import-Module SftRunAs; sft-runas '$account' '$toolName'`""
+      $shortcut.WorkingDirectory = $env:USERPROFILE
       $shortcut.Description = "Run $toolName as $account via Okta Privileged Access"
 
       if ($toolInfo.File -eq $mmc) {
