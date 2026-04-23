@@ -139,9 +139,13 @@ Special Commands:
           Write-Host "Please wait a few minutes and try again." -ForegroundColor Yellow
           exit 1
         }
-        if ($output -match 'Sent access request.*Request ID:\s*(\S+)') {
+        if ($output -match 'Sent access request') {
           Write-Host ""
-          Write-Host "Access request submitted. Request ID: $($Matches[1])" -ForegroundColor Cyan
+          if ($output -match 'Request ID:\s*(\S+)') {
+            Write-Host "Access request submitted. Request ID: $($Matches[1])" -ForegroundColor Cyan
+          } else {
+            Write-Host "Access request submitted." -ForegroundColor Cyan
+          }
           Write-Host "Please wait for approval and try again." -ForegroundColor Yellow
           exit 1
         }
