@@ -20,7 +20,8 @@ function Invoke-SftRunAs {
     [switch]$StartMenu,      # create-shortcuts only
 
     [switch]$Wait,
-    [switch]$PassThru
+    [switch]$PassThru,
+    [switch]$FromShortcut    # used by shortcuts to enable exit behavior
   )
 
   Set-StrictMode -Version Latest
@@ -61,6 +62,15 @@ Special Commands:
   function Require-Command([string]$Name) {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
       throw "Required command not found in PATH: $Name"
+    }
+  }
+
+  function Exit-WithMessage([string]$Message, [string]$Color = "Yellow") {
+    Write-Host ""
+    Write-Host $Message -ForegroundColor $Color
+    if ($FromShortcut) {
+      Read-Host "Press Enter to exit"
+      exit 1
     }
   }
 
@@ -124,8 +134,8 @@ Special Commands:
         $p.Kill()
         $partialOutput = $p.StandardOutput.ReadToEnd()
         $errorMessage = "sft command timed out after 120 seconds, likely waiting for interactive input. Please run 'sft $MyArgs' manually to resolve the ambiguity."
-        Write-Host $errorMessage -ForegroundColor Yellow
-        exit 1
+        Exit-WithMessage $errorMessage
+        return @()
       }
 
       # Process exited within the timeout.
@@ -138,23 +148,17 @@ Special Commands:
 
         # Check for known error conditions and provide friendly messages
         if ($combinedOutput -match 'password rotation in progress') {
-          Write-Host ""
-          Write-Host "Password rotation is currently in progress for this account." -ForegroundColor Yellow
-          Write-Host "Please wait a few minutes and try again." -ForegroundColor Yellow
-          Read-Host "Press Enter to exit"
-          exit 1
+          Exit-WithMessage "Password rotation is currently in progress for this account.`nPlease wait a few minutes and try again."
+          return @()
         }
         if ($combinedOutput -match 'Sent access request') {
-          Write-Host ""
           $requestIdMatch = [regex]::Match($combinedOutput, 'Request ID:\s*(\S+)')
           if ($requestIdMatch.Success) {
-            Write-Host "Access request submitted. Request ID: $($requestIdMatch.Groups[1].Value)" -ForegroundColor Cyan
+            Exit-WithMessage "Access request submitted. Request ID: $($requestIdMatch.Groups[1].Value)`nPlease wait for approval and try again." "Cyan"
           } else {
-            Write-Host "Access request submitted." -ForegroundColor Cyan
+            Exit-WithMessage "Access request submitted.`nPlease wait for approval and try again." "Cyan"
           }
-          Write-Host "Please wait for approval and try again." -ForegroundColor Yellow
-          Read-Host "Press Enter to exit"
-          exit 1
+          return @()
         }
         throw "sft failed (ExitCode: $($p.ExitCode)): $errorOutput"
       }
@@ -178,14 +182,8 @@ Special Commands:
       $pwLine = $out | Where-Object { $_ -and $_.Trim().Length -gt 0 -and $_ -notmatch 'PASSWORD\s+ACCOUNT' -and $_ -notmatch 'Session expires' } | Select-Object -First 1
 
       if (-not $pwLine) {
-        Write-Host ""
-        Write-Host "No password returned. This may indicate:" -ForegroundColor Yellow
-        Write-Host "  - An access request was submitted and is awaiting approval" -ForegroundColor Yellow
-        Write-Host "  - You do not have access to this account" -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "Check your OPA dashboard or try again later." -ForegroundColor Yellow
-        Read-Host "Press Enter to exit"
-        exit 1
+        Exit-WithMessage "No password returned. This may indicate:`n  - An access request was submitted and is awaiting approval`n  - You do not have access to this account`n`nCheck your OPA dashboard or try again later."
+        return $null
       }
 
       $pw = $pwLine.Split(' ')[0]
@@ -313,7 +311,7 @@ Special Commands:
       $psExe = Get-Command pwsh
       $shortcut = $wshShell.CreateShortcut($shortcutPath)
       $shortcut.TargetPath = $psExe.Source
-      $shortcut.Arguments = "-NoProfile -Command `"Import-Module SftRunAs; sft-runas '$account' '$toolName'`""
+      $shortcut.Arguments = "-NoProfile -Command `"Import-Module SftRunAs; sft-runas '$account' '$toolName' -FromShortcut`""
       $shortcut.WorkingDirectory = $env:USERPROFILE
       $shortcut.Description = "Run $displayName as $account via Okta Privileged Access"
 
@@ -449,6 +447,7 @@ Special Commands:
 
   try {
     $secure = Get-OpaAdPasswordSecure -AdDomainFqdn $AdDomainFqdn -AdUsername $($id.User) -Team $Team
+    if (-not $secure) { return }
     Write-Host "Credentials retrieved successfully." -ForegroundColor Green
     $cred   = [pscredential]::new($logonName, $secure)
 
