@@ -17,6 +17,7 @@ function Invoke-SftRunAs {
     [switch]$VerboseDoctor,
 
     [string]$Folder,         # create-shortcuts only
+    [switch]$StartMenu,      # create-shortcuts only
 
     [switch]$Wait,
     [switch]$PassThru
@@ -33,7 +34,7 @@ using just-in-time credentials from Okta Privileged Access.
 Usage:
   sft-runas <account> <tool> [tool_args]
   sft-runas list-tools
-  sft-runas create-shortcuts <account> [-Folder <name>]
+  sft-runas create-shortcuts <account> [-Folder <name>] [-StartMenu]
   sft-runas doctor [-ComputerName <target>]
 
 Arguments:
@@ -44,7 +45,8 @@ Arguments:
 Special Commands:
   list-tools     Show available tool presets.
   create-shortcuts Create desktop shortcuts for all tool presets.
-                 Use -Folder to place shortcuts in a desktop subfolder.
+                 Use -Folder to place shortcuts in a subfolder.
+                 Use -StartMenu to create in Start Menu (-Folder required).
   doctor         Run diagnostic checks.
 
 "@
@@ -159,26 +161,26 @@ Special Commands:
   $mmc = Join-Path $env:SystemRoot "System32\mmc.exe"
   $sys32 = Join-Path $env:SystemRoot "System32"
   $Presets = @{
-    aduc     = @{ File=$mmc; Args=@((Join-Path $sys32 "dsa.msc"));      Icon="$sys32\dsadmin.dll,0" }
-    gpo      = @{ File=$mmc; Args=@((Join-Path $sys32 "gpmc.msc"));     Icon="$sys32\gpmgmt.dll,0" }
-    dns      = @{ File=$mmc; Args=@((Join-Path $sys32 "dnsmgmt.msc")); Icon="$sys32\dnsmgr.dll,0" }
-    dhcp     = @{ File=$mmc; Args=@((Join-Path $sys32 "dhcpmgmt.msc")); Icon="$sys32\dhcpsnap.dll,0" }
-    sites    = @{ File=$mmc; Args=@((Join-Path $sys32 "dssite.msc"));   Icon="$sys32\dsadmin.dll,0" }
-    domains  = @{ File=$mmc; Args=@((Join-Path $sys32 "domain.msc"));   Icon="$sys32\dsadmin.dll,0" }
-    adsiedit = @{ File=$mmc; Args=@((Join-Path $sys32 "adsiedit.msc")); Icon="$sys32\adsiedit.dll,0" }
-    certtmpl = @{ File=$mmc; Args=@("certtmpl.msc"); Icon="$sys32\certmgr.dll,0" }
-    certsrv  = @{ File=$mmc; Args=@("certsrv.msc");  Icon="$sys32\certmgr.dll,0" }
-    pkiview  = @{ File=$mmc; Args=@("pkiview.msc");  Icon="$sys32\certmgr.dll,0" }
-    compmgmt = @{ File=$mmc; Args=@((Join-Path $sys32 "compmgmt.msc")); Icon="$sys32\mycomput.dll,0" }
-    eventvwr = @{ File=$mmc; Args=@((Join-Path $sys32 "eventvwr.msc")); Icon="$sys32\eventvwr.exe,0" }
-    services = @{ File=$mmc; Args=@("services.msc"); Icon="$sys32\filemgmt.dll,0" }
-    taskschd = @{ File=$mmc; Args=@("taskschd.msc"); Icon="$sys32\mstask.dll,0" }
-    diskmgmt = @{ File=$mmc; Args=@("diskmgmt.msc"); Icon="$sys32\dmdskres.dll,0" }
-    wf       = @{ File=$mmc; Args=@("wf.msc");       Icon="$sys32\wfres.dll,0" }
-    regedit  = @{ File="regedit.exe"; Args=@();      Icon="$sys32\regedit.exe,0" }
-    control  = @{ File="control.exe"; Args=@();      Icon="$sys32\control.exe,0" }
-    pwsh     = @{ File="pwsh.exe"; Args=@("-NoExit"); Icon="" }
-    powershell = @{ File="powershell.exe"; Args=@("-NoExit"); Icon="" }
+    aduc     = @{ File=$mmc; Args=@((Join-Path $sys32 "dsa.msc"));      Icon="$sys32\dsadmin.dll,0";            Name="Active Directory Users and Computers" }
+    gpo      = @{ File=$mmc; Args=@((Join-Path $sys32 "gpmc.msc"));     Icon="$sys32\gpoadmin.dll,0";           Name="Group Policy Management" }
+    dns      = @{ File=$mmc; Args=@((Join-Path $sys32 "dnsmgmt.msc")); Icon="$sys32\dnsmgr.dll,0";              Name="DNS Manager" }
+    dhcp     = @{ File=$mmc; Args=@((Join-Path $sys32 "dhcpmgmt.msc")); Icon="$sys32\dhcpssvc.dll,0";           Name="DHCP Manager" }
+    sites    = @{ File=$mmc; Args=@((Join-Path $sys32 "dssite.msc"));   Icon="$sys32\dsadmin.dll,0";            Name="Active Directory Sites and Services" }
+    domains  = @{ File=$mmc; Args=@((Join-Path $sys32 "domain.msc"));   Icon="$sys32\dsadmin.dll,0";            Name="Active Directory Domains and Trusts" }
+    adsiedit = @{ File=$mmc; Args=@((Join-Path $sys32 "adsiedit.msc")); Icon="$sys32\adsiedit.dll,0";           Name="ADSI Edit" }
+    certtmpl = @{ File=$mmc; Args=@("certtmpl.msc"); Icon="$sys32\certmgr.dll,0";                               Name="Certificate Templates" }
+    certsrv  = @{ File=$mmc; Args=@("certsrv.msc");  Icon="$sys32\certmgr.dll,0";                               Name="Certification Authority" }
+    pkiview  = @{ File=$mmc; Args=@("pkiview.msc");  Icon="$sys32\certmgr.dll,0";                               Name="Enterprise PKI" }
+    compmgmt = @{ File=$mmc; Args=@((Join-Path $sys32 "compmgmt.msc")); Icon="$sys32\mycomput.dll,0";           Name="Computer Management" }
+    eventvwr = @{ File=$mmc; Args=@((Join-Path $sys32 "eventvwr.msc")); Icon="$sys32\eventvwr.exe,0";           Name="Event Viewer" }
+    services = @{ File=$mmc; Args=@("services.msc"); Icon="$sys32\filemgmt.dll,0";                              Name="Services" }
+    taskschd = @{ File=$mmc; Args=@("taskschd.msc"); Icon="$sys32\mstask.dll,0";                                Name="Task Scheduler" }
+    diskmgmt = @{ File=$mmc; Args=@("diskmgmt.msc"); Icon="$sys32\dmdskres.dll,0";                              Name="Disk Management" }
+    wf       = @{ File=$mmc; Args=@("wf.msc");       Icon="$sys32\FirewallControlPanel.dll,0";                  Name="Windows Firewall with Advanced Security" }
+    regedit  = @{ File="regedit.exe"; Args=@();      Icon="$env:SystemRoot\regedit.exe,0";                      Name="Registry Editor" }
+    control  = @{ File="control.exe"; Args=@();      Icon="$sys32\control.exe,0";                               Name="Control Panel" }
+    pwsh     = @{ File="pwsh.exe"; Args=@("-NoExit"); Icon="";                                                  Name="PowerShell 7" }
+    powershell = @{ File="powershell.exe"; Args=@("-NoExit"); Icon="";                                          Name="Windows PowerShell" }
   }
 
   # Commands that don't need credentials
@@ -191,39 +193,85 @@ Special Commands:
     if (-not $Tool) {
       throw "The 'create-shortcuts' command requires an account argument. e.g. 'sft-runas create-shortcuts admin@corp.example.com'"
     }
+    if ($StartMenu -and -not $Folder) {
+      throw "The -StartMenu option requires -Folder to be specified. e.g. 'sft-runas create-shortcuts admin@corp.example.com -StartMenu -Folder ""Admin Tools""'"
+    }
+
     $account = $Tool
-    $desktopPath = [System.Environment]::GetFolderPath('Desktop')
+
+    if ($StartMenu) {
+      $basePath = Join-Path ([System.Environment]::GetFolderPath('StartMenu')) "Programs"
+    } else {
+      $basePath = [System.Environment]::GetFolderPath('Desktop')
+    }
 
     if ($Folder) {
-      $desktopPath = Join-Path $desktopPath $Folder
-      if (-not (Test-Path $desktopPath)) {
-        New-Item -ItemType Directory -Path $desktopPath -Force | Out-Null
+      $basePath = Join-Path $basePath $Folder
+      if (-not (Test-Path $basePath)) {
+        New-Item -ItemType Directory -Path $basePath -Force | Out-Null
       }
     }
 
     $wshShell = New-Object -ComObject WScript.Shell
 
-    $location = if ($Folder) { "desktop folder '$Folder'" } else { "desktop" }
-    Write-Host "Creating shortcuts on your $location for account '$account'..." -ForegroundColor Cyan
+    if ($StartMenu) {
+      $location = "Start Menu folder '$Folder'"
+    } elseif ($Folder) {
+      $location = "desktop folder '$Folder'"
+    } else {
+      $location = "desktop"
+    }
+    Write-Host "Creating shortcuts in your $location for account '$account'..." -ForegroundColor Cyan
+
+    $createdCount = 0
+    $skippedCount = 0
 
     foreach ($preset in $Presets.GetEnumerator() | Sort-Object Name) {
       $toolName = $preset.Name
       $toolInfo = $preset.Value
-      $shortcutName = "$toolName (SftRunAs)"
-      $shortcutPath = Join-Path $desktopPath "$shortcutName.lnk"
+
+      # Check if tool is available locally
+      $isAvailable = $false
+      if ($toolInfo.File -eq $mmc) {
+        $mscPath = $toolInfo.Args[0]
+        if ($mscPath -notmatch '^[A-Z]:\\' -and $mscPath -notmatch '^\\\\') {
+          $mscPath = Join-Path $sys32 $mscPath
+        }
+        $isAvailable = Test-Path $mscPath
+      } else {
+        $isAvailable = $null -ne (Get-Command $toolInfo.File -ErrorAction SilentlyContinue)
+      }
+
+      $displayName = if ($toolInfo.Name) { $toolInfo.Name } else { $toolName }
+
+      if (-not $isAvailable) {
+        Write-Host "Skipped: $displayName (not installed)" -ForegroundColor Yellow
+        $skippedCount++
+        continue
+      }
+
+      $shortcutName = "$displayName (SftRunAs)"
+      $shortcutPath = Join-Path $basePath "$shortcutName.lnk"
 
       $psExe = Get-Command pwsh
       $shortcut = $wshShell.CreateShortcut($shortcutPath)
       $shortcut.TargetPath = $psExe.Source
       $shortcut.Arguments = "-NoProfile -Command `"Import-Module SftRunAs; sft-runas '$account' '$toolName'`""
       $shortcut.WorkingDirectory = $env:USERPROFILE
-      $shortcut.Description = "Run $toolName as $account via Okta Privileged Access"
+      $shortcut.Description = "Run $displayName as $account via Okta Privileged Access"
 
       if ($toolInfo.Icon) {
         $shortcut.IconLocation = $toolInfo.Icon
       }
       $shortcut.Save()
-      Write-Host "Created shortcut: $shortcutName"
+      Write-Host "Created: $displayName" -ForegroundColor Green
+      $createdCount++
+    }
+
+    Write-Host ""
+    Write-Host "Done. Created $createdCount shortcut(s), skipped $skippedCount." -ForegroundColor Cyan
+    if ($skippedCount -gt 0) {
+      Write-Host "Tip: Install RSAT to enable additional AD/DNS/DHCP tools." -ForegroundColor Yellow
     }
     return
   }
