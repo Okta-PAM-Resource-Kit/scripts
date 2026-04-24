@@ -34,11 +34,13 @@ function Get-AdPasswordHistory {
     $startTime = (Get-Date).AddDays(-$Days)
 
     try {
+        # Event ID 4723: User changed their own password
+        # Event ID 4724: Password was reset by admin/service account
         $filterXml = @"
 <QueryList>
   <Query Id="0" Path="Security">
     <Select Path="Security">
-      *[System[(EventID=4724) and TimeCreated[@SystemTime &gt;= '$($startTime.ToUniversalTime().ToString("o"))']]]
+      *[System[(EventID=4723 or EventID=4724) and TimeCreated[@SystemTime &gt;= '$($startTime.ToUniversalTime().ToString("o"))']]]
       and
       *[EventData[Data[@Name='TargetUserName']='$samAccountName']]
     </Select>
@@ -54,8 +56,16 @@ function Get-AdPasswordHistory {
                 $eventData[$_.Name] = $_.'#text'
             }
 
+            $eventType = switch ($event.Id) {
+                4723 { 'SelfChange' }
+                4724 { 'Reset' }
+                default { 'Unknown' }
+            }
+
             $passwordEvents += [PSCustomObject]@{
                 TimeCreated = $event.TimeCreated
+                EventId = $event.Id
+                EventType = $eventType
                 SubjectUserName = $eventData['SubjectUserName']
                 SubjectDomainName = $eventData['SubjectDomainName']
                 TargetUserName = $eventData['TargetUserName']
@@ -63,7 +73,7 @@ function Get-AdPasswordHistory {
             }
         }
 
-        Write-Verbose "Found $($passwordEvents.Count) password reset events (4724) for $samAccountName in last $Days days"
+        Write-Verbose "Found $($passwordEvents.Count) password change events (4723/4724) for $samAccountName in last $Days days"
     }
     catch {
         Write-Warning "Failed to query Security Event Log: $_"
