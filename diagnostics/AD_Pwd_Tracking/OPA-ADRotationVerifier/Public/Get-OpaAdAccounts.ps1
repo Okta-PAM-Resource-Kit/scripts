@@ -7,7 +7,7 @@ function Get-OpaAdAccounts {
 
     $config = Initialize-OpaConfig
 
-    $endpoint = "/v1/teams/$($config.team_name)/active_directory/$ConnectionId/accounts"
+    $endpoint = "/v1/teams/$($config.team_name)/resource_assignment/active_directory/$ConnectionId/accounts"
     Write-Verbose "Fetching AD accounts from $endpoint"
 
     $response = Invoke-OpaApiRequest -Endpoint $endpoint -Config $config
