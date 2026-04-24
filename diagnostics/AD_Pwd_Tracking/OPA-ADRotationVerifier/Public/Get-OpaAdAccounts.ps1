@@ -30,46 +30,59 @@ function Get-OpaAdAccounts {
 
     $accountsWithRotation = @()
     foreach ($account in $accounts) {
-        Write-Verbose "Fetching rotation details for account: $($account.username)"
+        $accountUpn = if ($account.upn) { $account.upn } else { $account.username }
+        Write-Verbose "Fetching rotation details for account: $accountUpn"
 
         $detailEndpoint = "/v1/teams/$($config.team_name)/resource_assignment/active_directory/$ConnectionId/accounts/$($account.id)"
         try {
             $detail = Invoke-OpaApiRequest -Endpoint $detailEndpoint -Config $config
 
+            Write-Verbose "Detail response: $($detail | ConvertTo-Json -Depth 3 -Compress)"
+
             $accountsWithRotation += [PSCustomObject]@{
-                Id = $account.id
-                Username = $account.username
-                AccountType = $detail.account.account_type
-                AvailabilityStatus = $detail.account.availability_status
-                DisplayName = $detail.account.display_name
-                SamAccountName = $detail.account.sam_account_name
-                DistinguishedName = $detail.account.distinguished_name
-                BroughtUnderManagementAt = $detail.account.brought_under_management_at
-                LastPasswordChangeSuccessTimestamp = $detail.rotation.last_password_change_success_report_timestamp
-                LastPasswordChangeSystemTimestamp = $detail.rotation.last_password_change_system_timestamp
-                LastPasswordChangeErrorTimestamp = $detail.rotation.last_password_change_error_report_timestamp
-                PasswordChangeSuccessCount = $detail.rotation.password_change_success_count
-                PasswordChangeErrorCount = $detail.rotation.password_change_error_count
-                PasswordChangeErrorCountSinceLastSuccess = $detail.rotation.password_change_error_count_since_last_success
+                Id = $detail.id
+                Username = $detail.upn
+                AccountType = $detail.account_type
+                CheckoutStatus = $detail.checkout_status
+                DisplayName = $detail.display_name
+                SamAccountName = $detail.sam_account_name
+                DistinguishedName = $detail.distinguished_name
+                Domain = $detail.domain.name
+                BroughtUnderManagementAt = $detail.brought_under_management_at
+                LastRotationAt = $detail.last_rotation_at
+                LastPasswordChangeSuccessTimestamp = $detail.last_password_change_success_report_timestamp
+                LastPasswordChangeSystemTimestamp = $detail.last_password_change_system_timestamp
+                LastPasswordChangeErrorTimestamp = $detail.last_password_change_error_report_timestamp
+                LastPasswordChangeErrorType = $detail.last_password_change_error_type
+                PasswordChangeSuccessCount = $detail.password_change_success_count
+                PasswordChangeErrorCount = $detail.password_change_error_count
+                PasswordChangeErrorCountSinceLastSuccess = $detail.password_change_error_count_since_last_success
+                NextScheduledRotation = $detail.next_scheduled_password_rotation_timestamp
+                NextScheduledRotationReason = $detail.next_scheduled_password_rotation_reason
             }
         }
         catch {
-            Write-Warning "Failed to get rotation details for $($account.username): $_"
+            Write-Warning "Failed to get rotation details for $accountUpn : $_"
             $accountsWithRotation += [PSCustomObject]@{
                 Id = $account.id
-                Username = $account.username
+                Username = $accountUpn
                 AccountType = $null
-                AvailabilityStatus = $null
+                CheckoutStatus = $null
                 DisplayName = $null
                 SamAccountName = $null
                 DistinguishedName = $null
+                Domain = $null
                 BroughtUnderManagementAt = $null
+                LastRotationAt = $null
                 LastPasswordChangeSuccessTimestamp = $null
                 LastPasswordChangeSystemTimestamp = $null
                 LastPasswordChangeErrorTimestamp = $null
+                LastPasswordChangeErrorType = $null
                 PasswordChangeSuccessCount = $null
                 PasswordChangeErrorCount = $null
                 PasswordChangeErrorCountSinceLastSuccess = $null
+                NextScheduledRotation = $null
+                NextScheduledRotationReason = $null
             }
         }
     }
