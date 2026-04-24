@@ -6,6 +6,9 @@ function Initialize-OpaConfig {
         opa_url = ''
         team_name = ''
         timestamp_tolerance_seconds = 120
+        secrets_resource_group = ''
+        secrets_project = ''
+        secrets_id = ''
     }
 
     if (Test-Path $script:ConfigPath) {
@@ -16,6 +19,9 @@ function Initialize-OpaConfig {
             if ($fileConfig.timestamp_tolerance_seconds) {
                 $config.timestamp_tolerance_seconds = $fileConfig.timestamp_tolerance_seconds
             }
+            if ($fileConfig.secrets_resource_group) { $config.secrets_resource_group = $fileConfig.secrets_resource_group }
+            if ($fileConfig.secrets_project) { $config.secrets_project = $fileConfig.secrets_project }
+            if ($fileConfig.secrets_id) { $config.secrets_id = $fileConfig.secrets_id }
         }
         catch {
             Write-Warning "Failed to read config file: $_"
@@ -36,12 +42,36 @@ function Initialize-OpaConfig {
         }
     }
 
+    if ([string]::IsNullOrWhiteSpace($config.secrets_resource_group)) {
+        $config.secrets_resource_group = Read-Host "Enter Secrets Resource Group"
+        if ([string]::IsNullOrWhiteSpace($config.secrets_resource_group)) {
+            throw "Secrets Resource Group is required"
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($config.secrets_project)) {
+        $config.secrets_project = Read-Host "Enter Secrets Project"
+        if ([string]::IsNullOrWhiteSpace($config.secrets_project)) {
+            throw "Secrets Project is required"
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($config.secrets_id)) {
+        $config.secrets_id = Read-Host "Enter Secret ID (UUID)"
+        if ([string]::IsNullOrWhiteSpace($config.secrets_id)) {
+            throw "Secret ID is required"
+        }
+    }
+
     $config.opa_url = $config.opa_url.TrimEnd('/')
 
     $configToSave = @{
         opa_url = $config.opa_url
         team_name = $config.team_name
         timestamp_tolerance_seconds = $config.timestamp_tolerance_seconds
+        secrets_resource_group = $config.secrets_resource_group
+        secrets_project = $config.secrets_project
+        secrets_id = $config.secrets_id
     }
     $configToSave | ConvertTo-Json | Set-Content $script:ConfigPath -Force
 

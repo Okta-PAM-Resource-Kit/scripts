@@ -14,12 +14,12 @@ function Get-OpaToken {
         }
     }
 
-    # Need new token - get credentials if not provided
-    if (-not $Credential) {
-        $Credential = Get-OpaCredential
-    }
+    # Need new token - get config and credentials
     if (-not $Config) {
         $Config = Initialize-OpaConfig
+    }
+    if (-not $Credential) {
+        $Credential = Get-OpaCredential -Config $Config
     }
 
     $tokenUrl = "$($Config.opa_url)/v1/teams/$($Config.team_name)/service_token"
