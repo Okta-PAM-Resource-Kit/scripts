@@ -32,7 +32,7 @@ function Get-OpaAdAccounts {
     foreach ($account in $accounts) {
         Write-Verbose "Fetching rotation details for account: $($account.username)"
 
-        $detailEndpoint = "/v1/teams/$($config.team_name)/active_directory/$ConnectionId/accounts/$($account.id)"
+        $detailEndpoint = "/v1/teams/$($config.team_name)/resource_assignment/active_directory/$ConnectionId/accounts/$($account.id)"
         try {
             $detail = Invoke-OpaApiRequest -Endpoint $detailEndpoint -Config $config
 
