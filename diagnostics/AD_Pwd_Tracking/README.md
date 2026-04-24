@@ -56,8 +56,12 @@ curl -o "$modulePath\Public\Get-AdPasswordHistory.ps1" "$baseUrl/Public/Get-AdPa
 curl -o "$modulePath\Public\Compare-OpaAdRotations.ps1" "$baseUrl/Public/Compare-OpaAdRotations.ps1"
 curl -o "$modulePath\Public\Export-RotationReport.ps1" "$baseUrl/Public/Export-RotationReport.ps1"
 
+# Download standalone scripts
+curl -o "$modulePath\..\Update-GroupRoles.ps1" "https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/diagnostics/AD_Pwd_Tracking/Update-GroupRoles.ps1"
+
 # Unblock downloaded files (required for files downloaded from the internet)
 Get-ChildItem -Path $modulePath -Recurse | Unblock-File
+Get-ChildItem -Path "$modulePath\..\Update-GroupRoles.ps1" | Unblock-File
 ```
 
 ### Import and Run
@@ -84,4 +88,18 @@ On first run, the module prompts for:
 3. **Key-ID** - OPA Service Account key ID
 4. **Key-Secret** - OPA Service Account key secret
 
-Settings are stored in `config.json` (URL/team) and Windows Credential Manager (secrets).
+Settings are stored in `config.json` (URL/team/secrets config).
+
+## Additional Scripts
+
+### Update-GroupRoles.ps1
+
+Standalone script to update OPA group roles. Uses the same config.json and sft secrets reveal mechanism.
+
+```powershell
+# Default: updates ad-rotate-validator with end_user, pam_admin, resource_admin
+.\Update-GroupRoles.ps1
+
+# Custom group and roles
+.\Update-GroupRoles.ps1 -GroupName "my-group" -Roles @("end_user", "pam_admin")
+```
