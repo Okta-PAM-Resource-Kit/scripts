@@ -10,7 +10,7 @@
     The name of the group to update (default: ad-rotate-validator)
 
 .PARAMETER Roles
-    Comma-separated list of roles to assign (default: end_user,pam_admin,resource_admin)
+    Roles to assign. Accepts array or comma-separated string (default: end_user,pam_admin,resource_admin)
 
 .EXAMPLE
     .\Update-GroupRoles.ps1
@@ -18,18 +18,27 @@
 
 .EXAMPLE
     .\Update-GroupRoles.ps1 -GroupName "my-group" -Roles "end_user,pam_admin"
-    Updates my-group with specified roles
+    Updates my-group with specified roles (comma-separated string)
+
+.EXAMPLE
+    .\Update-GroupRoles.ps1 -GroupName "my-group" -Roles @("end_user", "pam_admin")
+    Updates my-group with specified roles (array)
 #>
 
 [CmdletBinding()]
 param(
     [string]$GroupName = "ad-rotate-validator",
 
-    [string]$Roles = "end_user,pam_admin,resource_admin"
+    $Roles = "end_user,pam_admin,resource_admin"
 )
 
-# Parse comma-separated roles into array
-$RolesArray = $Roles -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+# Parse roles into array - handles both array and comma-separated string
+if ($Roles -is [array]) {
+    $RolesArray = $Roles
+}
+else {
+    $RolesArray = $Roles -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+}
 
 $ErrorActionPreference = "Stop"
 
