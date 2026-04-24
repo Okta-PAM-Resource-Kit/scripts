@@ -45,6 +45,7 @@ function Get-OpaCredential {
         try {
             $null = cmdkey /delete:$script:CredentialTarget 2>&1
             $null = cmdkey /generic:$script:CredentialTarget /user:$keyId /pass:$keySecret
+            Write-Host "Credentials stored in Windows Credential Manager." -ForegroundColor Green
             Write-Verbose "Credentials stored in Windows Credential Manager"
         }
         catch {
