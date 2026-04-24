@@ -26,6 +26,13 @@ function Export-RotationReport {
     )
 
     try {
+        # Create directory if it doesn't exist
+        $directory = Split-Path -Parent $Path
+        if ($directory -and -not (Test-Path $directory)) {
+            New-Item -ItemType Directory -Path $directory -Force | Out-Null
+            Write-Verbose "Created directory: $directory"
+        }
+
         $exportData | Export-Csv -Path $Path -NoTypeInformation -Force
         Write-Host "Report exported to: $Path" -ForegroundColor Green
     }
