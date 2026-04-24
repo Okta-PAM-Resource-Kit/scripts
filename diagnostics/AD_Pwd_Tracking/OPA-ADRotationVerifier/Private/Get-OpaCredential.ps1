@@ -35,18 +35,27 @@ function Get-OpaCredential {
         }
 
         $keySecretSecure = Read-Host "Enter Key-Secret" -AsSecureString
+        Write-Host "Processing credentials..." -ForegroundColor Yellow
+
         $keySecret = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
             [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($keySecretSecure)
         )
         if ([string]::IsNullOrWhiteSpace($keySecret)) {
             throw "Key-Secret is required"
         }
+        Write-Verbose "Key-Secret received (length: $($keySecret.Length))"
 
+        Write-Host "Storing credentials..." -ForegroundColor Yellow
         try {
-            $null = cmdkey /delete:$script:CredentialTarget 2>&1
-            $null = cmdkey /generic:$script:CredentialTarget /user:$keyId /pass:$keySecret
+            Write-Verbose "Deleting any existing credential..."
+            $deleteResult = cmdkey /delete:$script:CredentialTarget 2>&1
+            Write-Verbose "Delete result: $deleteResult"
+
+            Write-Verbose "Storing new credential..."
+            $addResult = cmdkey /generic:$script:CredentialTarget /user:$keyId /pass:$keySecret 2>&1
+            Write-Verbose "Add result: $addResult"
+
             Write-Host "Credentials stored in Windows Credential Manager." -ForegroundColor Green
-            Write-Verbose "Credentials stored in Windows Credential Manager"
         }
         catch {
             Write-Warning "Failed to store credentials: $_"
