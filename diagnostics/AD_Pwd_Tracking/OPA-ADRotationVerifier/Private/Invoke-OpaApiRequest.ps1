@@ -1,19 +1,11 @@
 function Get-OpaToken {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)]
-        [string]$OpaUrl,
-
-        [Parameter(Mandatory)]
-        [string]$TeamName,
-
-        [Parameter(Mandatory)]
-        [string]$KeyId,
-
-        [Parameter(Mandatory)]
-        [string]$KeySecret
+        [hashtable]$Config,
+        [hashtable]$Credential
     )
 
+    # Check for valid cached token first
     if ($script:BearerToken -and $script:TokenExpiresAt) {
         $bufferTime = (Get-Date).AddSeconds(60)
         if ($script:TokenExpiresAt -gt $bufferTime) {
@@ -22,19 +14,25 @@ function Get-OpaToken {
         }
     }
 
-    $tokenUrl = "$OpaUrl/v1/teams/$TeamName/service_token"
+    # Need new token - get credentials if not provided
+    if (-not $Credential) {
+        $Credential = Get-OpaCredential
+    }
+    if (-not $Config) {
+        $Config = Initialize-OpaConfig
+    }
+
+    $tokenUrl = "$($Config.opa_url)/v1/teams/$($Config.team_name)/service_token"
     $body = @{
-        key_id = $KeyId
-        key_secret = $KeySecret
+        key_id = $Credential.KeyId
+        key_secret = $Credential.KeySecret
     } | ConvertTo-Json
 
     Write-Verbose "Requesting new bearer token from $tokenUrl"
     Write-Host "Authenticating to OPA API..." -ForegroundColor Yellow
 
     try {
-        # Ensure TLS 1.2 is enabled
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
         $response = Invoke-RestMethod -Uri $tokenUrl -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 30
         $script:BearerToken = $response.bearer_token
         $script:TokenExpiresAt = [DateTime]::Parse($response.expires_at)
@@ -60,16 +58,11 @@ function Invoke-OpaApiRequest {
         [object]$Body,
 
         [Parameter(Mandatory)]
-        [hashtable]$Config,
-
-        [Parameter(Mandatory)]
-        [hashtable]$Credential
+        [hashtable]$Config
     )
 
-    $token = Get-OpaToken -OpaUrl $Config.opa_url `
-                          -TeamName $Config.team_name `
-                          -KeyId $Credential.KeyId `
-                          -KeySecret $Credential.KeySecret
+    # Get token - will use cached token or prompt for credentials if needed
+    $token = Get-OpaToken -Config $Config
 
     $url = "$($Config.opa_url)$Endpoint"
     $headers = @{
