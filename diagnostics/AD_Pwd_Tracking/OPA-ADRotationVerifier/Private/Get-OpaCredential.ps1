@@ -34,8 +34,12 @@ function Get-OpaCredential {
             throw "Key-ID is required"
         }
 
-        # Use plain text input to avoid SecureString issues with pasting
-        $keySecret = Read-Host "Enter Key-Secret"
+        Write-Host "Enter Key-Secret (or press Enter to read from clipboard): " -NoNewline
+        $keySecret = Read-Host
+        if ([string]::IsNullOrWhiteSpace($keySecret)) {
+            Write-Host "Reading from clipboard..." -ForegroundColor Yellow
+            $keySecret = Get-Clipboard
+        }
         Write-Host "Processing credentials..." -ForegroundColor Yellow
 
         if ([string]::IsNullOrWhiteSpace($keySecret)) {
