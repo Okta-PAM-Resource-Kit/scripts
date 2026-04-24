@@ -53,3 +53,7 @@ Thumbs.db
 # kube-apiserver.yaml files #
 #############################
 kube-apiserver*
+
+# API samples (reference only, not part of module) #
+####################################################
+opa-api-samples.go
