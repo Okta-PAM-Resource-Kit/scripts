@@ -12,9 +12,15 @@ function Get-OpaAdAccounts {
 
     $response = Invoke-OpaApiRequest -Endpoint $endpoint -Config $config
 
+    Write-Verbose "Response type: $($response.GetType().FullName)"
+    Write-Verbose "Response content: $($response | ConvertTo-Json -Depth 3 -Compress)"
+
     $accounts = @()
-    if ($response.list) {
+    if ($response.list -and $response.list.Count -gt 0) {
         $accounts = $response.list
+    }
+    elseif ($response.accounts -and $response.accounts.Count -gt 0) {
+        $accounts = $response.accounts
     }
     elseif ($response -is [array]) {
         $accounts = $response

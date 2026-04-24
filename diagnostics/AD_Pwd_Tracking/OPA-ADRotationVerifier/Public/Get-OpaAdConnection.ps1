@@ -21,9 +21,15 @@ function Get-OpaAdConnection {
 
     $response = Invoke-OpaApiRequest -Endpoint $endpoint -Config $config
 
+    Write-Verbose "Response type: $($response.GetType().FullName)"
+    Write-Verbose "Response content: $($response | ConvertTo-Json -Depth 3 -Compress)"
+
     $connections = @()
-    if ($response.list) {
+    if ($response.list -and $response.list.Count -gt 0) {
         $connections = $response.list
+    }
+    elseif ($response.connections -and $response.connections.Count -gt 0) {
+        $connections = $response.connections
     }
     elseif ($response -is [array]) {
         $connections = $response
