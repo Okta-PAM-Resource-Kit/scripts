@@ -32,17 +32,29 @@ Always test in a non-production environment first. The module stores API credent
 ### Download via curl
 
 ```powershell
-# Create module directory
-New-Item -ItemType Directory -Path "$env:USERPROFILE\Documents\PowerShell\Modules\OPA-ADRotationVerifier" -Force
+# Set base URL and module path
+$baseUrl = "https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/diagnostics/AD_Pwd_Tracking/OPA-ADRotationVerifier"
+$modulePath = "$env:USERPROFILE\Documents\PowerShell\Modules\OPA-ADRotationVerifier"
 
-# Download module (replace URL with actual repository URL)
-curl -L -o "$env:TEMP\OPA-ADRotationVerifier.zip" "https://github.com/YOUR_ORG/AD_Pwd_Tracking/archive/main.zip"
+# Create module directory structure
+New-Item -ItemType Directory -Path "$modulePath\Private" -Force
+New-Item -ItemType Directory -Path "$modulePath\Public" -Force
 
-# Extract
-Expand-Archive -Path "$env:TEMP\OPA-ADRotationVerifier.zip" -DestinationPath "$env:TEMP\OPA-ADRotationVerifier-extract" -Force
+# Download module manifest and loader
+curl -o "$modulePath\OPA-ADRotationVerifier.psd1" "$baseUrl/OPA-ADRotationVerifier.psd1"
+curl -o "$modulePath\OPA-ADRotationVerifier.psm1" "$baseUrl/OPA-ADRotationVerifier.psm1"
 
-# Copy module files
-Copy-Item -Path "$env:TEMP\OPA-ADRotationVerifier-extract\*\OPA-ADRotationVerifier\*" -Destination "$env:USERPROFILE\Documents\PowerShell\Modules\OPA-ADRotationVerifier" -Recurse -Force
+# Download private functions
+curl -o "$modulePath\Private\Initialize-OpaConfig.ps1" "$baseUrl/Private/Initialize-OpaConfig.ps1"
+curl -o "$modulePath\Private\Get-OpaCredential.ps1" "$baseUrl/Private/Get-OpaCredential.ps1"
+curl -o "$modulePath\Private\Invoke-OpaApiRequest.ps1" "$baseUrl/Private/Invoke-OpaApiRequest.ps1"
+
+# Download public functions
+curl -o "$modulePath\Public\Get-OpaAdConnection.ps1" "$baseUrl/Public/Get-OpaAdConnection.ps1"
+curl -o "$modulePath\Public\Get-OpaAdAccounts.ps1" "$baseUrl/Public/Get-OpaAdAccounts.ps1"
+curl -o "$modulePath\Public\Get-AdPasswordHistory.ps1" "$baseUrl/Public/Get-AdPasswordHistory.ps1"
+curl -o "$modulePath\Public\Compare-OpaAdRotations.ps1" "$baseUrl/Public/Compare-OpaAdRotations.ps1"
+curl -o "$modulePath\Public\Export-RotationReport.ps1" "$baseUrl/Public/Export-RotationReport.ps1"
 ```
 
 ### Import and Run
