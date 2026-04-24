@@ -29,15 +29,21 @@ function Get-OpaToken {
     } | ConvertTo-Json
 
     Write-Verbose "Requesting new bearer token from $tokenUrl"
+    Write-Host "Authenticating to OPA API..." -ForegroundColor Yellow
 
     try {
-        $response = Invoke-RestMethod -Uri $tokenUrl -Method Post -Body $body -ContentType 'application/json'
+        # Ensure TLS 1.2 is enabled
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+        $response = Invoke-RestMethod -Uri $tokenUrl -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 30
         $script:BearerToken = $response.bearer_token
         $script:TokenExpiresAt = [DateTime]::Parse($response.expires_at)
+        Write-Host "Authentication successful." -ForegroundColor Green
         Write-Verbose "Obtained bearer token, expires at $script:TokenExpiresAt"
         return $script:BearerToken
     }
     catch {
+        Write-Host "Authentication failed." -ForegroundColor Red
         throw "Failed to obtain bearer token: $_"
     }
 }
@@ -85,7 +91,7 @@ function Invoke-OpaApiRequest {
     }
 
     try {
-        $response = Invoke-RestMethod @params
+        $response = Invoke-RestMethod @params -TimeoutSec 30
         return $response
     }
     catch {
