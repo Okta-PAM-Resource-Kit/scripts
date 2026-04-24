@@ -10,14 +10,14 @@
     The name of the group to update (default: ad-rotate-validator)
 
 .PARAMETER Roles
-    Array of roles to assign (default: end_user, pam_admin, resource_admin)
+    Comma-separated list of roles to assign (default: end_user,pam_admin,resource_admin)
 
 .EXAMPLE
     .\Update-GroupRoles.ps1
     Updates ad-rotate-validator group with default roles
 
 .EXAMPLE
-    .\Update-GroupRoles.ps1 -GroupName "my-group" -Roles @("end_user", "pam_admin")
+    .\Update-GroupRoles.ps1 -GroupName "my-group" -Roles "end_user,pam_admin"
     Updates my-group with specified roles
 #>
 
@@ -25,8 +25,11 @@
 param(
     [string]$GroupName = "ad-rotate-validator",
 
-    [string[]]$Roles = @("end_user", "pam_admin", "resource_admin")
+    [string]$Roles = "end_user,pam_admin,resource_admin"
 )
+
+# Parse comma-separated roles into array
+$RolesArray = $Roles -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
 
 $ErrorActionPreference = "Stop"
 
@@ -209,7 +212,7 @@ Write-Verbose "Config loaded: URL=$($config.opa_url), Team=$($config.team_name)"
 
 $credential = Get-Credentials -Config $config
 $token = Get-BearerToken -Config $config -Credential $credential
-$result = Update-GroupRoles -Config $config -Token $token -GroupName $GroupName -Roles $Roles
+$result = Update-GroupRoles -Config $config -Token $token -GroupName $GroupName -Roles $RolesArray
 
 # Verify the roles were set
 $group = Get-GroupRoles -Config $config -Token $token -GroupName $GroupName
@@ -217,11 +220,11 @@ $actualRoles = $group.roles
 
 Write-Host ""
 Write-Host "Verification:" -ForegroundColor Cyan
-Write-Host "  Expected: $($Roles -join ', ')" -ForegroundColor White
+Write-Host "  Expected: $($RolesArray -join ', ')" -ForegroundColor White
 Write-Host "  Actual:   $($actualRoles -join ', ')" -ForegroundColor White
 
-$missingRoles = $Roles | Where-Object { $_ -notin $actualRoles }
-$extraRoles = $actualRoles | Where-Object { $_ -notin $Roles }
+$missingRoles = $RolesArray | Where-Object { $_ -notin $actualRoles }
+$extraRoles = $actualRoles | Where-Object { $_ -notin $RolesArray }
 
 if ($missingRoles.Count -eq 0 -and $extraRoles.Count -eq 0) {
     Write-Host "  Status:   VERIFIED" -ForegroundColor Green
