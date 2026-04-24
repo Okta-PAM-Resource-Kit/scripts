@@ -5,7 +5,6 @@ function Get-OpaAdConnection {
     )
 
     $config = Initialize-OpaConfig
-    $credential = Get-OpaCredential
 
     if ([string]::IsNullOrWhiteSpace($Domain)) {
         try {
@@ -20,7 +19,7 @@ function Get-OpaAdConnection {
     $endpoint = "/v1/teams/$($config.team_name)/connections/active_directory"
     Write-Verbose "Fetching AD connections from $endpoint"
 
-    $response = Invoke-OpaApiRequest -Endpoint $endpoint -Config $config -Credential $credential
+    $response = Invoke-OpaApiRequest -Endpoint $endpoint -Config $config
 
     $connections = @()
     if ($response.list) {

@@ -6,12 +6,11 @@ function Get-OpaAdAccounts {
     )
 
     $config = Initialize-OpaConfig
-    $credential = Get-OpaCredential
 
     $endpoint = "/v1/teams/$($config.team_name)/active_directory/$ConnectionId/accounts"
     Write-Verbose "Fetching AD accounts from $endpoint"
 
-    $response = Invoke-OpaApiRequest -Endpoint $endpoint -Config $config -Credential $credential
+    $response = Invoke-OpaApiRequest -Endpoint $endpoint -Config $config
 
     $accounts = @()
     if ($response.list) {
@@ -29,7 +28,7 @@ function Get-OpaAdAccounts {
 
         $detailEndpoint = "/v1/teams/$($config.team_name)/active_directory/$ConnectionId/accounts/$($account.id)"
         try {
-            $detail = Invoke-OpaApiRequest -Endpoint $detailEndpoint -Config $config -Credential $credential
+            $detail = Invoke-OpaApiRequest -Endpoint $detailEndpoint -Config $config
 
             $accountsWithRotation += [PSCustomObject]@{
                 Id = $account.id
