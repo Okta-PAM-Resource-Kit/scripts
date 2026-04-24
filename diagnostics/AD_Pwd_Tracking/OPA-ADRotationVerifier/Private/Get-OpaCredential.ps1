@@ -1,114 +1,57 @@
 function Get-OpaCredential {
     [CmdletBinding()]
     param(
-        [switch]$Force
+        [hashtable]$Config
     )
 
-    $keyId = $null
-    $keySecret = $null
-
-    if (-not $Force) {
-        try {
-            $cmdkeyOutput = cmdkey /list:$script:CredentialTarget 2>&1
-            if ($cmdkeyOutput -match 'Target:') {
-                $cred = Get-StoredCredential -Target $script:CredentialTarget
-                if ($cred) {
-                    $keyId = $cred.UserName
-                    $keySecret = $cred.GetNetworkCredential().Password
-                    Write-Verbose "Retrieved credentials from Windows Credential Manager"
-                }
-            }
-        }
-        catch {
-            Write-Verbose "Credential Manager lookup failed, will prompt for credentials"
-        }
+    if (-not $Config) {
+        $Config = Initialize-OpaConfig
     }
 
-    if ([string]::IsNullOrWhiteSpace($keyId) -or [string]::IsNullOrWhiteSpace($keySecret)) {
-        Write-Host "OPA API credentials not found. Please provide them now."
-        Write-Host "These will be stored securely in Windows Credential Manager."
-        Write-Host ""
+    Write-Host "Retrieving API credentials from OPA Secrets..." -ForegroundColor Yellow
 
-        $keyId = Read-Host "Enter Key-ID"
-        if ([string]::IsNullOrWhiteSpace($keyId)) {
-            throw "Key-ID is required"
-        }
-
-        Write-Host "Enter Key-Secret (or press Enter to read from clipboard): " -NoNewline
-        $keySecret = Read-Host
-        if ([string]::IsNullOrWhiteSpace($keySecret)) {
-            Write-Host "Reading from clipboard..." -ForegroundColor Yellow
-            $keySecret = Get-Clipboard
-        }
-        Write-Host "Processing credentials..." -ForegroundColor Yellow
-
-        if ([string]::IsNullOrWhiteSpace($keySecret)) {
-            throw "Key-Secret is required"
-        }
-        Write-Verbose "Key-Secret received (length: $($keySecret.Length))"
-
-        # Skip credential storage for now - just use in-memory for this session
-        Write-Host "Credentials loaded for this session." -ForegroundColor Green
-        Write-Verbose "Skipping Windows Credential Manager storage to avoid cmdkey issues"
-    }
-
-    return @{
-        KeyId = $keyId
-        KeySecret = $keySecret
-    }
-}
-
-function Get-StoredCredential {
-    [CmdletBinding()]
-    param(
-        [string]$Target
-    )
-
-    Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-using System.Text;
-
-public class CredentialManager {
-    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    public static extern bool CredRead(string target, int type, int flags, out IntPtr credential);
-
-    [DllImport("advapi32.dll", SetLastError = true)]
-    public static extern bool CredFree(IntPtr credential);
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public struct CREDENTIAL {
-        public int Flags;
-        public int Type;
-        public string TargetName;
-        public string Comment;
-        public long LastWritten;
-        public int CredentialBlobSize;
-        public IntPtr CredentialBlob;
-        public int Persist;
-        public int AttributeCount;
-        public IntPtr Attributes;
-        public string TargetAlias;
-        public string UserName;
-    }
-}
-"@ -ErrorAction SilentlyContinue
-
-    $credPtr = [IntPtr]::Zero
-    $result = [CredentialManager]::CredRead($Target, 1, 0, [ref]$credPtr)
-
-    if (-not $result) {
-        return $null
-    }
+    $sftCommand = "sft secrets reveal --resource-group `"$($Config.secrets_resource_group)`" --project `"$($Config.secrets_project)`" --id `"$($Config.secrets_id)`" --output json"
+    Write-Verbose "Running: $sftCommand"
 
     try {
-        $cred = [System.Runtime.InteropServices.Marshal]::PtrToStructure($credPtr, [Type][CredentialManager+CREDENTIAL])
-        $password = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($cred.CredentialBlob, $cred.CredentialBlobSize / 2)
+        $secretJson = Invoke-Expression $sftCommand 2>&1
 
-        $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
-        return New-Object System.Management.Automation.PSCredential($cred.UserName, $securePassword)
+        if ($LASTEXITCODE -ne 0) {
+            throw "sft command failed: $secretJson"
+        }
+
+        $secretData = $secretJson | ConvertFrom-Json
+        Write-Verbose "Secret data retrieved: $($secretData | ConvertTo-Json -Compress)"
+
+        $keyId = $null
+        $keySecret = $null
+
+        foreach ($item in $secretData) {
+            if ($item.key_name -eq 'apikey') {
+                $keyId = $item.secret_value
+            }
+            elseif ($item.key_name -eq 'apisecret') {
+                $keySecret = $item.secret_value
+            }
+        }
+
+        if ([string]::IsNullOrWhiteSpace($keyId)) {
+            throw "Could not find 'apikey' in secret response"
+        }
+        if ([string]::IsNullOrWhiteSpace($keySecret)) {
+            throw "Could not find 'apisecret' in secret response"
+        }
+
+        Write-Host "API credentials retrieved successfully." -ForegroundColor Green
+        Write-Verbose "Key-ID length: $($keyId.Length), Key-Secret length: $($keySecret.Length)"
+
+        return @{
+            KeyId = $keyId
+            KeySecret = $keySecret
+        }
     }
-    finally {
-        [CredentialManager]::CredFree($credPtr) | Out-Null
+    catch {
+        Write-Host "Failed to retrieve credentials from OPA Secrets." -ForegroundColor Red
+        throw "Failed to get credentials via sft: $_"
     }
 }

@@ -1,5 +1,8 @@
 {
   "opa_url": "",
   "team_name": "",
-  "timestamp_tolerance_seconds": 120
+  "timestamp_tolerance_seconds": 120,
+  "secrets_resource_group": "",
+  "secrets_project": "",
+  "secrets_id": ""
 }
