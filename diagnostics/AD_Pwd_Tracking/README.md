@@ -55,6 +55,9 @@ curl -o "$modulePath\Public\Get-OpaAdAccounts.ps1" "$baseUrl/Public/Get-OpaAdAcc
 curl -o "$modulePath\Public\Get-AdPasswordHistory.ps1" "$baseUrl/Public/Get-AdPasswordHistory.ps1"
 curl -o "$modulePath\Public\Compare-OpaAdRotations.ps1" "$baseUrl/Public/Compare-OpaAdRotations.ps1"
 curl -o "$modulePath\Public\Export-RotationReport.ps1" "$baseUrl/Public/Export-RotationReport.ps1"
+
+# Unblock downloaded files (required for files downloaded from the internet)
+Get-ChildItem -Path $modulePath -Recurse | Unblock-File
 ```
 
 ### Import and Run
