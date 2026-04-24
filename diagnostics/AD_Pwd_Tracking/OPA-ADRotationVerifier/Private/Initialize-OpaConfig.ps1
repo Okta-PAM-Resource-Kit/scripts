@@ -6,6 +6,7 @@ function Initialize-OpaConfig {
         opa_url = ''
         team_name = ''
         timestamp_tolerance_seconds = 120
+        event_lookback_days = 7
         secrets_resource_group = ''
         secrets_project = ''
         secrets_id = ''
@@ -18,6 +19,9 @@ function Initialize-OpaConfig {
             if ($fileConfig.team_name) { $config.team_name = $fileConfig.team_name }
             if ($fileConfig.timestamp_tolerance_seconds) {
                 $config.timestamp_tolerance_seconds = $fileConfig.timestamp_tolerance_seconds
+            }
+            if ($fileConfig.event_lookback_days) {
+                $config.event_lookback_days = $fileConfig.event_lookback_days
             }
             if ($fileConfig.secrets_resource_group) { $config.secrets_resource_group = $fileConfig.secrets_resource_group }
             if ($fileConfig.secrets_project) { $config.secrets_project = $fileConfig.secrets_project }
@@ -69,6 +73,7 @@ function Initialize-OpaConfig {
         opa_url = $config.opa_url
         team_name = $config.team_name
         timestamp_tolerance_seconds = $config.timestamp_tolerance_seconds
+        event_lookback_days = $config.event_lookback_days
         secrets_resource_group = $config.secrets_resource_group
         secrets_project = $config.secrets_project
         secrets_id = $config.secrets_id

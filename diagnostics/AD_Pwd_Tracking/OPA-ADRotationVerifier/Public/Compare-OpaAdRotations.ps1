@@ -5,15 +5,19 @@ function Compare-OpaAdRotations {
 
         [string]$Domain,
 
-        [int]$EventDays = 7
+        [int]$LookbackDays = 0
     )
 
     $config = Initialize-OpaConfig
     $toleranceSeconds = $config.timestamp_tolerance_seconds
 
+    # Use CLI parameter if provided, otherwise use config value
+    $eventDays = if ($LookbackDays -gt 0) { $LookbackDays } else { $config.event_lookback_days }
+
     Write-Host "OPA AD Rotation Verification" -ForegroundColor Cyan
     Write-Host "=============================" -ForegroundColor Cyan
     Write-Host "Tolerance: $toleranceSeconds seconds"
+    Write-Host "Event Lookback: $eventDays days"
     Write-Host ""
 
     $connection = Get-OpaAdConnection -Domain $Domain
@@ -34,7 +38,7 @@ function Compare-OpaAdRotations {
     foreach ($account in $accounts) {
         Write-Verbose "Processing account: $($account.Username)"
 
-        $adHistory = Get-AdPasswordHistory -UserPrincipalName $account.Username -Days $EventDays
+        $adHistory = Get-AdPasswordHistory -UserPrincipalName $account.Username -Days $eventDays
 
         $opaTimestamp = $null
         if ($account.LastPasswordChangeSuccessTimestamp) {
