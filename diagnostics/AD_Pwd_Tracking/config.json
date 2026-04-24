@@ -2,6 +2,7 @@
   "opa_url": "",
   "team_name": "",
   "timestamp_tolerance_seconds": 120,
+  "event_lookback_days": 7,
   "secrets_resource_group": "",
   "secrets_project": "",
   "secrets_id": ""
