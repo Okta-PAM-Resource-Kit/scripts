@@ -174,6 +174,32 @@ function Update-GroupRoles {
     }
 }
 
+function Get-GroupRoles {
+    param(
+        [hashtable]$Config,
+        [string]$Token,
+        [string]$GroupName
+    )
+
+    $url = "$($Config.opa_url)/v1/teams/$($Config.team_name)/groups/$GroupName"
+    $headers = @{
+        'Authorization' = "Bearer $Token"
+        'Accept' = 'application/json'
+    }
+
+    Write-Host "Verifying roles for group '$GroupName'..." -ForegroundColor Yellow
+
+    try {
+        $response = Invoke-RestMethod -Uri $url -Method Get -Headers $headers -TimeoutSec 30
+        return $response
+    }
+    catch {
+        $statusCode = $_.Exception.Response.StatusCode.value__
+        $errorBody = $_.ErrorDetails.Message
+        throw "Failed to get group ($statusCode): $errorBody"
+    }
+}
+
 # Main execution
 Write-Host "=== OPA Group Roles Updater ===" -ForegroundColor Cyan
 Write-Host ""
@@ -184,6 +210,31 @@ Write-Verbose "Config loaded: URL=$($config.opa_url), Team=$($config.team_name)"
 $credential = Get-Credentials -Config $config
 $token = Get-BearerToken -Config $config -Credential $credential
 $result = Update-GroupRoles -Config $config -Token $token -GroupName $GroupName -Roles $Roles
+
+# Verify the roles were set
+$group = Get-GroupRoles -Config $config -Token $token -GroupName $GroupName
+$actualRoles = $group.roles
+
+Write-Host ""
+Write-Host "Verification:" -ForegroundColor Cyan
+Write-Host "  Expected: $($Roles -join ', ')" -ForegroundColor White
+Write-Host "  Actual:   $($actualRoles -join ', ')" -ForegroundColor White
+
+$missingRoles = $Roles | Where-Object { $_ -notin $actualRoles }
+$extraRoles = $actualRoles | Where-Object { $_ -notin $Roles }
+
+if ($missingRoles.Count -eq 0 -and $extraRoles.Count -eq 0) {
+    Write-Host "  Status:   VERIFIED" -ForegroundColor Green
+}
+else {
+    if ($missingRoles.Count -gt 0) {
+        Write-Host "  Missing:  $($missingRoles -join ', ')" -ForegroundColor Red
+    }
+    if ($extraRoles.Count -gt 0) {
+        Write-Host "  Extra:    $($extraRoles -join ', ')" -ForegroundColor Yellow
+    }
+    Write-Host "  Status:   MISMATCH" -ForegroundColor Red
+}
 
 Write-Host ""
 Write-Host "Done." -ForegroundColor Green
