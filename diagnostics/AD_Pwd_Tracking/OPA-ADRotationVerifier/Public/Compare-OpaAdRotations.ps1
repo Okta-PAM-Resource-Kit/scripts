@@ -106,41 +106,58 @@ function Compare-OpaAdRotations {
     Write-Host ""
     Write-Host "Rotation Comparison Results" -ForegroundColor Cyan
     Write-Host "============================" -ForegroundColor Cyan
-    Write-Host ""
 
-    foreach ($result in $results) {
-        $statusColor = switch ($result.Status) {
-            'MATCH' { 'Green' }
-            'MISMATCH' { 'Red' }
-            'AD_USER_NOT_FOUND' { 'Yellow' }
-            'NO_OPA_ROTATION' { 'Yellow' }
-            default { 'Gray' }
+    # Group results by status
+    $matches = $results | Where-Object { $_.Status -eq 'MATCH' }
+    $mismatches = $results | Where-Object { $_.Status -eq 'MISMATCH' }
+    $others = $results | Where-Object { $_.Status -notin @('MATCH', 'MISMATCH') }
+
+    # Display matches
+    if ($matches.Count -gt 0) {
+        Write-Host ""
+        Write-Host "=== MATCHES ($($matches.Count)) ===" -ForegroundColor Green
+        foreach ($result in $matches) {
+            Write-Host "  $($result.Account)" -ForegroundColor Green
+            if ($result.DeltaSeconds) {
+                Write-Host "    Delta: $($result.DeltaSeconds) seconds" -ForegroundColor DarkGray
+            }
         }
+    }
 
-        Write-Host "$($result.Account)" -ForegroundColor White -NoNewline
-        Write-Host " - " -NoNewline
-        Write-Host "$($result.Status)" -ForegroundColor $statusColor
-
-        if ($result.DeltaSeconds) {
-            Write-Host "  Delta: $($result.DeltaSeconds) seconds"
+    # Display mismatches (highlighted)
+    if ($mismatches.Count -gt 0) {
+        Write-Host ""
+        Write-Host "=== MISMATCHES ($($mismatches.Count)) ===" -ForegroundColor Red -BackgroundColor Black
+        foreach ($result in $mismatches) {
+            Write-Host "  $($result.Account)" -ForegroundColor Red -BackgroundColor Black
+            Write-Host "    OPA Last Rotation:  $($result.OpaLastRotation)" -ForegroundColor Red
+            Write-Host "    AD PasswordLastSet: $($result.AdPasswordLastSet)" -ForegroundColor Red
+            Write-Host "    Delta: $($result.DeltaSeconds) seconds" -ForegroundColor Red
+            if ($result.OtherChangers) {
+                Write-Host "    Non-OPA changes: $($result.OtherChangers)" -ForegroundColor Yellow
+            }
         }
-        if ($result.OtherChangers) {
-            Write-Host "  WARNING: Non-OPA password changes detected:" -ForegroundColor Yellow
-            Write-Host "    $($result.OtherChangers)" -ForegroundColor Yellow
+    }
+
+    # Display others
+    if ($others.Count -gt 0) {
+        Write-Host ""
+        Write-Host "=== OTHER ($($others.Count)) ===" -ForegroundColor Yellow
+        foreach ($result in $others) {
+            Write-Host "  $($result.Account) - $($result.Status)" -ForegroundColor Yellow
+            if ($result.OtherChangers) {
+                Write-Host "    Non-OPA changes: $($result.OtherChangers)" -ForegroundColor Yellow
+            }
         }
     }
 
     Write-Host ""
-    $matchCount = ($results | Where-Object { $_.Status -eq 'MATCH' }).Count
-    $mismatchCount = ($results | Where-Object { $_.Status -eq 'MISMATCH' }).Count
-    $otherCount = ($results | Where-Object { $_.Status -notin @('MATCH', 'MISMATCH') }).Count
-
     Write-Host "Summary: " -NoNewline
-    Write-Host "$matchCount MATCH" -ForegroundColor Green -NoNewline
+    Write-Host "$($matches.Count) MATCH" -ForegroundColor Green -NoNewline
     Write-Host ", " -NoNewline
-    Write-Host "$mismatchCount MISMATCH" -ForegroundColor Red -NoNewline
+    Write-Host "$($mismatches.Count) MISMATCH" -ForegroundColor Red -NoNewline
     Write-Host ", " -NoNewline
-    Write-Host "$otherCount OTHER" -ForegroundColor Yellow
+    Write-Host "$($others.Count) OTHER" -ForegroundColor Yellow
 
     if ($ExportPath) {
         Export-RotationReport -Results $results -Path $ExportPath
