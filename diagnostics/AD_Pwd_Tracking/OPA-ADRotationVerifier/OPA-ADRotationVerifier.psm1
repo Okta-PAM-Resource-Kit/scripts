@@ -1,3 +1,8 @@
+# Require PowerShell 7.x
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    throw "This module requires PowerShell 7.x or later. Current version: $($PSVersionTable.PSVersion). Please run with 'pwsh' instead of 'powershell'."
+}
+
 $script:ModuleRoot = $PSScriptRoot
 $script:ConfigPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'config.json'
 $script:CredentialTarget = 'OPA-ADRotationVerifier'

@@ -6,7 +6,7 @@
     CompanyName = 'Okta'
     Copyright = '(c) 2024 Okta. All rights reserved.'
     Description = 'Verifies OPA Active Directory credential rotations against actual AD password changes'
-    PowerShellVersion = '5.1'
+    PowerShellVersion = '7.0'
     RequiredModules = @('ActiveDirectory')
     FunctionsToExport = @(
         'Compare-OpaAdRotations',
