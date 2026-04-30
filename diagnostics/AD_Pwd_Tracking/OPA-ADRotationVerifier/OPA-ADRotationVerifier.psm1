@@ -1,6 +1,6 @@
-# Require PowerShell 7.x
+# Require PowerShell 7 or later
 if ($PSVersionTable.PSVersion.Major -lt 7) {
-    throw "This module requires PowerShell 7.x or later. Current version: $($PSVersionTable.PSVersion). Please run with 'pwsh' instead of 'powershell'."
+    throw "This module requires PowerShell 7 or later. Current version: $($PSVersionTable.PSVersion). Please run with 'pwsh' instead of 'powershell'."
 }
 
 $script:ModuleRoot = $PSScriptRoot
