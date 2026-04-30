@@ -8,7 +8,7 @@ PowerShell module for verifying Okta Privileged Access (OPA) Active Directory cr
 
 ## Requirements
 
-- **PowerShell 7.x** (pwsh) - Windows PowerShell 5.1 is not supported
+- **PowerShell 7 or later** (pwsh) - Windows PowerShell 5.1 is not supported
 - Domain Controller or domain-joined server with AD PowerShell module
 - OPA Service Account API credentials (Key-ID and Key-Secret)
 - Read access to Security Event Log (Event IDs 4723, 4724)
