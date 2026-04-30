@@ -5,8 +5,17 @@ function Compare-OpaAdRotations {
 
         [string]$Domain,
 
-        [int]$LookbackDays = 0
+        [int]$LookbackDays = 0,
+
+        [switch]$ForceTokenRefresh
     )
+
+    # Clear cached token if force refresh requested
+    if ($ForceTokenRefresh) {
+        $script:BearerToken = $null
+        $script:TokenExpiresAt = $null
+        Write-Verbose "Cleared cached bearer token"
+    }
 
     $config = Initialize-OpaConfig
     $toleranceSeconds = $config.timestamp_tolerance_seconds
