@@ -11,9 +11,7 @@ function Compare-OpaAdRotations {
 
         [switch]$ShowDetails,
 
-        [switch]$ForceRotation,
-
-        [switch]$ValidateTimestamps
+        [switch]$ForceRotation
     )
 
     # Clear cached token if force refresh requested
@@ -44,23 +42,23 @@ function Compare-OpaAdRotations {
     Write-Host ""
 
     Write-Host "Fetching managed accounts..." -ForegroundColor Yellow
-    $accountParams = @{ ConnectionId = $connection.id }
-    if ($ValidateTimestamps) { $accountParams.ValidateTimestamps = $true }
-    $accounts = Get-OpaAdAccounts @accountParams
+    $accounts = Get-OpaAdAccounts -ConnectionId $connection.id
     Write-Host "Found $($accounts.Count) managed accounts" -ForegroundColor Green
     Write-Host ""
 
     $results = @()
+    $detailFetchCount = 0
 
     foreach ($account in $accounts) {
         Write-Verbose "Processing account: $($account.Username)"
 
         $adHistory = Get-AdPasswordHistory -UserPrincipalName $account.Username -Days $eventDays
 
+        # First try comparing with last_rotation_at from list API
         $opaTimestamp = $null
-        if ($account.LastPasswordChangeSuccessTimestamp) {
+        if ($account.LastRotationAt) {
             try {
-                $opaTimestamp = [DateTime]::Parse($account.LastPasswordChangeSuccessTimestamp)
+                $opaTimestamp = [DateTime]::Parse($account.LastRotationAt)
             }
             catch {
                 Write-Warning "Failed to parse OPA timestamp for $($account.Username)"
@@ -70,6 +68,9 @@ function Compare-OpaAdRotations {
         $adTimestamp = $adHistory.PasswordLastSet
         $deltaSeconds = $null
         $status = 'UNKNOWN'
+        $rotationFailed = $false
+        $opaSuccessCount = $null
+        $opaErrorCount = $null
 
         if (-not $adHistory.AdUserFound) {
             $status = 'AD_USER_NOT_FOUND'
@@ -86,7 +87,39 @@ function Compare-OpaAdRotations {
                 $status = 'MATCH'
             }
             else {
-                $status = 'MISMATCH'
+                # Mismatch with list API - fetch detail to check last successful rotation
+                Write-Verbose "Mismatch detected for $($account.Username), fetching detail API..."
+                $detailFetchCount++
+
+                try {
+                    $detail = Get-OpaAdAccountDetail -ConnectionId $connection.id -AccountId $account.Id
+                    $opaSuccessCount = $detail.PasswordChangeSuccessCount
+                    $opaErrorCount = $detail.PasswordChangeErrorCount
+
+                    if ($detail.LastPasswordChangeSuccessTimestamp) {
+                        $successTimestamp = [DateTime]::Parse($detail.LastPasswordChangeSuccessTimestamp)
+                        $successDelta = [Math]::Abs(($successTimestamp - $adTimestamp).TotalSeconds)
+
+                        if ($successDelta -le $toleranceSeconds) {
+                            # AD matches last successful rotation - recent attempt failed
+                            $status = 'MATCH'
+                            $rotationFailed = $true
+                            $opaTimestamp = $successTimestamp
+                            $deltaSeconds = $successDelta
+                            Write-Verbose "AD matches last successful rotation (recent attempt failed)"
+                        }
+                        else {
+                            $status = 'MISMATCH'
+                        }
+                    }
+                    else {
+                        $status = 'MISMATCH'
+                    }
+                }
+                catch {
+                    Write-Warning "Failed to fetch detail for $($account.Username): $_"
+                    $status = 'MISMATCH'
+                }
             }
         }
 
@@ -101,11 +134,12 @@ function Compare-OpaAdRotations {
             AccountId = $account.Id
             Account = $account.Username
             Status = $status
+            RotationFailed = $rotationFailed
             OpaLastRotation = $opaTimestamp
             AdPasswordLastSet = $adTimestamp
             DeltaSeconds = $deltaSeconds
-            OpaSuccessCount = $account.PasswordChangeSuccessCount
-            OpaErrorCount = $account.PasswordChangeErrorCount
+            OpaSuccessCount = $opaSuccessCount
+            OpaErrorCount = $opaErrorCount
             RecentAdEvents = $adHistory.EventCount
             OtherChangers = ($otherChangers -join '; ')
             AdUserFound = $adHistory.AdUserFound
@@ -125,6 +159,7 @@ function Compare-OpaAdRotations {
     Write-Host "$($mismatches.Count) MISMATCH" -ForegroundColor Red -NoNewline
     Write-Host ", " -NoNewline
     Write-Host "$($others.Count) OTHER" -ForegroundColor Yellow
+    Write-Host "Detail API calls: $detailFetchCount (only fetched for AD mismatches)" -ForegroundColor DarkGray
 
     # Show detailed rotation info only if -ShowDetails or -ExportPath specified
     if ($ShowDetails -or $ExportPath) {
@@ -140,6 +175,9 @@ function Compare-OpaAdRotations {
                 Write-Host "  $($result.Account)" -ForegroundColor Green
                 if ($result.DeltaSeconds) {
                     Write-Host "    Delta: $($result.DeltaSeconds) seconds" -ForegroundColor DarkGray
+                }
+                if ($result.RotationFailed) {
+                    Write-Host "    WARNING: Last rotation attempt failed (AD matches last successful rotation)" -ForegroundColor Yellow
                 }
             }
         }

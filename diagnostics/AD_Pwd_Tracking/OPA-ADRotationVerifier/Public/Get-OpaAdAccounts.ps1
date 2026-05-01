@@ -4,7 +4,7 @@ function Get-OpaAdAccounts {
         [Parameter(Mandatory)]
         [string]$ConnectionId,
 
-        [switch]$ValidateTimestamps
+        [switch]$IncludeRotationDetails
     )
 
     $config = Initialize-OpaConfig
@@ -53,17 +53,23 @@ function Get-OpaAdAccounts {
         $pageNum++
     } while ($currentEndpoint)
 
-    $accounts = $allAccounts
+    Write-Verbose "Retrieved $($allAccounts.Count) managed accounts"
 
-    Write-Verbose "Retrieved $($accounts.Count) managed accounts"
+    if (-not $IncludeRotationDetails) {
+        $results = @()
+        foreach ($account in $allAccounts) {
+            $results += [PSCustomObject]@{
+                Id = $account.id
+                Username = if ($account.upn) { $account.upn } else { $account.username }
+                LastRotationAt = $account.last_rotation_at
+            }
+        }
+        return $results
+    }
 
     $accountsWithRotation = @()
-    $timestampMatches = 0
-    $timestampMismatches = 0
-
-    foreach ($account in $accounts) {
+    foreach ($account in $allAccounts) {
         $accountUpn = if ($account.upn) { $account.upn } else { $account.username }
-        $listLastRotation = $account.last_rotation_at
         Write-Verbose "Fetching rotation details for account: $accountUpn"
 
         $detailEndpoint = "/v1/teams/$($config.team_name)/resource_assignment/active_directory/$ConnectionId/accounts/$($account.id)"
@@ -71,20 +77,6 @@ function Get-OpaAdAccounts {
             $detail = Invoke-OpaApiRequest -Endpoint $detailEndpoint -Config $config
 
             Write-Verbose "Detail response: $($detail | ConvertTo-Json -Depth 3 -Compress)"
-
-            if ($ValidateTimestamps) {
-                $detailTimestamp = $detail.last_password_change_success_report_timestamp
-                if ($listLastRotation -eq $detailTimestamp) {
-                    $timestampMatches++
-                    Write-Verbose "MATCH: $accountUpn - List: $listLastRotation, Detail: $detailTimestamp"
-                }
-                else {
-                    $timestampMismatches++
-                    Write-Host "MISMATCH: $accountUpn" -ForegroundColor Yellow
-                    Write-Host "  List API last_rotation_at:                      $listLastRotation" -ForegroundColor Yellow
-                    Write-Host "  Detail API last_password_change_success_report: $detailTimestamp" -ForegroundColor Yellow
-                }
-            }
 
             $accountsWithRotation += [PSCustomObject]@{
                 Id = $detail.id
@@ -120,7 +112,7 @@ function Get-OpaAdAccounts {
                 DistinguishedName = $null
                 Domain = $null
                 BroughtUnderManagementAt = $null
-                LastRotationAt = $null
+                LastRotationAt = $account.last_rotation_at
                 LastPasswordChangeSuccessTimestamp = $null
                 LastPasswordChangeSystemTimestamp = $null
                 LastPasswordChangeErrorTimestamp = $null
@@ -134,17 +126,44 @@ function Get-OpaAdAccounts {
         }
     }
 
-    if ($ValidateTimestamps) {
-        Write-Host ""
-        Write-Host "Timestamp Validation Summary" -ForegroundColor Cyan
-        Write-Host "============================" -ForegroundColor Cyan
-        Write-Host "Matches:    $timestampMatches" -ForegroundColor Green
-        Write-Host "Mismatches: $timestampMismatches" -ForegroundColor $(if ($timestampMismatches -gt 0) { 'Red' } else { 'Green' })
-        if ($timestampMismatches -eq 0) {
-            Write-Host ""
-            Write-Host "All timestamps match - individual account calls could be eliminated." -ForegroundColor Green
-        }
-    }
-
     return $accountsWithRotation
+}
+
+function Get-OpaAdAccountDetail {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ConnectionId,
+
+        [Parameter(Mandatory)]
+        [string]$AccountId
+    )
+
+    $config = Initialize-OpaConfig
+    $endpoint = "/v1/teams/$($config.team_name)/resource_assignment/active_directory/$ConnectionId/accounts/$AccountId"
+
+    Write-Verbose "Fetching account detail from $endpoint"
+    $detail = Invoke-OpaApiRequest -Endpoint $endpoint -Config $config
+
+    return [PSCustomObject]@{
+        Id = $detail.id
+        Username = $detail.upn
+        AccountType = $detail.account_type
+        CheckoutStatus = $detail.checkout_status
+        DisplayName = $detail.display_name
+        SamAccountName = $detail.sam_account_name
+        DistinguishedName = $detail.distinguished_name
+        Domain = $detail.domain.name
+        BroughtUnderManagementAt = $detail.brought_under_management_at
+        LastRotationAt = $detail.last_rotation_at
+        LastPasswordChangeSuccessTimestamp = $detail.last_password_change_success_report_timestamp
+        LastPasswordChangeSystemTimestamp = $detail.last_password_change_system_timestamp
+        LastPasswordChangeErrorTimestamp = $detail.last_password_change_error_report_timestamp
+        LastPasswordChangeErrorType = $detail.last_password_change_error_type
+        PasswordChangeSuccessCount = $detail.password_change_success_count
+        PasswordChangeErrorCount = $detail.password_change_error_count
+        PasswordChangeErrorCountSinceLastSuccess = $detail.password_change_error_count_since_last_success
+        NextScheduledRotation = $detail.next_scheduled_password_rotation_timestamp
+        NextScheduledRotationReason = $detail.next_scheduled_password_rotation_reason
+    }
 }

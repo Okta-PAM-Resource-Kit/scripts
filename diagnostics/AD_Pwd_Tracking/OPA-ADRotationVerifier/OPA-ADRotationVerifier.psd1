@@ -12,6 +12,7 @@
         'Compare-OpaAdRotations',
         'Get-OpaAdConnection',
         'Get-OpaAdAccounts',
+        'Get-OpaAdAccountDetail',
         'Get-AdPasswordHistory',
         'Export-RotationReport'
     )
