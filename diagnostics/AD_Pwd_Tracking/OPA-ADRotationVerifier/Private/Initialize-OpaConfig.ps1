@@ -10,6 +10,8 @@ function Initialize-OpaConfig {
         secrets_resource_group = ''
         secrets_project = ''
         secrets_id = ''
+        secrets_key_id_name = ''
+        secrets_key_secret_name = ''
     }
 
     if (Test-Path $script:ConfigPath) {
@@ -26,6 +28,8 @@ function Initialize-OpaConfig {
             if ($fileConfig.secrets_resource_group) { $config.secrets_resource_group = $fileConfig.secrets_resource_group }
             if ($fileConfig.secrets_project) { $config.secrets_project = $fileConfig.secrets_project }
             if ($fileConfig.secrets_id) { $config.secrets_id = $fileConfig.secrets_id }
+            if ($fileConfig.secrets_key_id_name) { $config.secrets_key_id_name = $fileConfig.secrets_key_id_name }
+            if ($fileConfig.secrets_key_secret_name) { $config.secrets_key_secret_name = $fileConfig.secrets_key_secret_name }
         }
         catch {
             Write-Warning "Failed to read config file: $_"
@@ -67,6 +71,20 @@ function Initialize-OpaConfig {
         }
     }
 
+    if ([string]::IsNullOrWhiteSpace($config.secrets_key_id_name)) {
+        $config.secrets_key_id_name = Read-Host "Enter Key Name for API Key ID (e.g., apikey)"
+        if ([string]::IsNullOrWhiteSpace($config.secrets_key_id_name)) {
+            throw "Key Name for API Key ID is required"
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($config.secrets_key_secret_name)) {
+        $config.secrets_key_secret_name = Read-Host "Enter Key Name for API Key Secret (e.g., apisecret)"
+        if ([string]::IsNullOrWhiteSpace($config.secrets_key_secret_name)) {
+            throw "Key Name for API Key Secret is required"
+        }
+    }
+
     $config.opa_url = $config.opa_url.TrimEnd('/')
 
     $configToSave = @{
@@ -77,6 +95,8 @@ function Initialize-OpaConfig {
         secrets_resource_group = $config.secrets_resource_group
         secrets_project = $config.secrets_project
         secrets_id = $config.secrets_id
+        secrets_key_id_name = $config.secrets_key_id_name
+        secrets_key_secret_name = $config.secrets_key_secret_name
     }
     $configToSave | ConvertTo-Json | Set-Content $script:ConfigPath -Force
 

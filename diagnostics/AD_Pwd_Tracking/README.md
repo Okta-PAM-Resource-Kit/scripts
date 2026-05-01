@@ -10,9 +10,17 @@ PowerShell module for verifying Okta Privileged Access (OPA) Active Directory cr
 
 - **PowerShell 7 or later** (pwsh) - Windows PowerShell 5.1 is not supported
 - Domain Controller or domain-joined server with AD PowerShell module
-- OPA Service Account API credentials (Key-ID and Key-Secret)
+- **ScaleFT Client (sft)** installed and enrolled into the OPA team
+- OPA Service Account API credentials stored in an OPA Secret
 - Read access to Security Event Log (Event IDs 4723, 4724)
 - Network access to OPA API endpoints
+
+### Credential Security
+
+This module retrieves API credentials from OPA Secrets using `sft secrets reveal`, leveraging the user's enrolled identity. Credentials are held in memory only and never written to disk. This approach:
+- Eliminates storing API keys on the server
+- Uses existing OPA enrollment for authentication
+- Supports credential rotation without reconfiguration
 
 ### OPA Service User Permissions
 
@@ -134,11 +142,13 @@ Compare-OpaAdRotations -ForceRotation
 On first run, the module prompts for:
 1. **OPA URL** - e.g., `https://myorg.pam.okta.com`
 2. **Team Name** - your OPA team identifier
-3. **Secrets Resource Group** - OPA resource group containing API credentials
-4. **Secrets Project** - OPA project containing API credentials
-5. **Secret ID** - UUID of the secret containing apikey/apisecret
+3. **Secrets Resource Group** - OPA resource group containing the API credential secret
+4. **Secrets Project** - OPA project containing the API credential secret
+5. **Secret ID** - UUID of the secret containing the API credentials
+6. **Key Name for API Key ID** - the key name in the secret for the API key ID (e.g., `apikey`)
+7. **Key Name for API Key Secret** - the key name in the secret for the API key secret (e.g., `apisecret`)
 
-Settings are stored in `config.json`.
+Settings are stored in `config.json`. Use `-ShowConfig` to view current configuration and file path.
 
 ## Additional Scripts
 
