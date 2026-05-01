@@ -62,8 +62,8 @@ function Get-OpaAdAccounts {
                 Id = $account.id
                 Username = if ($account.upn) { $account.upn } else { $account.username }
                 LastRotationAt = $account.last_rotation_at
-                ResourceGroupId = $account.resource_group_id
-                ProjectId = $account.project_id
+                ResourceGroupId = $account.resource_group.id
+                ProjectId = $account.project.id
             }
         }
         return $results
