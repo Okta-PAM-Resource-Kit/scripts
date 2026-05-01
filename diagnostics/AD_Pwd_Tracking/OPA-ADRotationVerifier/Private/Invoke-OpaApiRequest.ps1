@@ -58,13 +58,15 @@ function Invoke-OpaApiRequest {
         [object]$Body,
 
         [Parameter(Mandatory)]
-        [hashtable]$Config
+        [hashtable]$Config,
+
+        [switch]$IncludeHeaders
     )
 
     # Get token - will use cached token or prompt for credentials if needed
     $token = Get-OpaToken -Config $Config
 
-    $url = "$($Config.opa_url)$Endpoint"
+    $url = if ($Endpoint -match '^https?://') { $Endpoint } else { "$($Config.opa_url)$Endpoint" }
     $headers = @{
         'Authorization' = "Bearer $token"
         'Accept' = 'application/json'
@@ -84,8 +86,18 @@ function Invoke-OpaApiRequest {
     }
 
     try {
-        $response = Invoke-RestMethod @params -TimeoutSec 30
-        return $response
+        if ($IncludeHeaders) {
+            $response = Invoke-WebRequest @params -TimeoutSec 30
+            $content = $response.Content | ConvertFrom-Json
+            return @{
+                Content = $content
+                Headers = $response.Headers
+            }
+        }
+        else {
+            $response = Invoke-RestMethod @params -TimeoutSec 30
+            return $response
+        }
     }
     catch {
         $statusCode = $_.Exception.Response.StatusCode.value__
