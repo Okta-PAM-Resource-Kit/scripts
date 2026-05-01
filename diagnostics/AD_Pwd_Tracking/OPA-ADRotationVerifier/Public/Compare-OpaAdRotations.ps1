@@ -284,8 +284,21 @@ function Compare-OpaAdRotations {
     Write-Host "$($others.Count) OTHER" -ForegroundColor Yellow
     Write-Host "Detail API calls: $detailFetchCount (only fetched for AD mismatches)" -ForegroundColor DarkGray
 
-    # Show detailed rotation info only if -ShowDetails or -ExportPath specified
-    if ($ShowDetails -or $ExportPath) {
+    # Always show mismatches in summary
+    if ($mismatches.Count -gt 0) {
+        Write-Host ""
+        Write-Host "Mismatched Accounts:" -ForegroundColor Red
+        foreach ($mismatch in $mismatches) {
+            Write-Host "  $($mismatch.Account)" -ForegroundColor Red
+            Write-Host "    AD PasswordLastSet: $($mismatch.AdPasswordLastSet)" -ForegroundColor Yellow
+            if ($mismatch.OtherChangers) {
+                Write-Host "    Changed by: $($mismatch.OtherChangers)" -ForegroundColor Yellow
+            }
+        }
+    }
+
+    # Show detailed rotation info only if -ShowDetails specified
+    if ($ShowDetails) {
         Write-Host ""
         Write-Host "Rotation Details" -ForegroundColor Cyan
         Write-Host "================" -ForegroundColor Cyan
@@ -354,7 +367,11 @@ function Compare-OpaAdRotations {
 
     if ($ExportPath) {
         Export-RotationReport -Results $results -Path $ExportPath
+        return $results
     }
 
-    return $results
+    # Only return results if captured to a variable (not displayed to console)
+    if ($MyInvocation.Line -match '^\s*\$\w+\s*=') {
+        return $results
+    }
 }
