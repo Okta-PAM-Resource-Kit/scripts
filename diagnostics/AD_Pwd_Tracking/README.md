@@ -131,12 +131,6 @@ Force token refresh (clear cached bearer token):
 Compare-OpaAdRotations -ForceTokenRefresh
 ```
 
-Trigger password rotation for mismatched accounts:
-
-```powershell
-Compare-OpaAdRotations -ForceRotation
-```
-
 ## Configuration
 
 On first run, the module prompts for:

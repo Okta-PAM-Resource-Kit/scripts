@@ -22,9 +22,6 @@
 .PARAMETER ShowDetails
     Display detailed rotation information for all accounts.
 
-.PARAMETER ForceRotation
-    Trigger password rotation for accounts with mismatches.
-
 .PARAMETER Help
     Display usage information.
 
@@ -46,9 +43,6 @@
     Compare-OpaAdRotations -ExportPath "C:\Reports\rotation-report.csv"
     Run comparison and export results to CSV.
 
-.EXAMPLE
-    Compare-OpaAdRotations -ForceRotation
-    Run comparison and trigger rotation for mismatched accounts.
 #>
 function Compare-OpaAdRotations {
     [CmdletBinding()]
@@ -62,8 +56,6 @@ function Compare-OpaAdRotations {
         [switch]$ForceTokenRefresh,
 
         [switch]$ShowDetails,
-
-        [switch]$ForceRotation,
 
         [switch]$Help,
 
@@ -85,7 +77,6 @@ function Compare-OpaAdRotations {
         Write-Host "  -LookbackDays <n>     Days to search event logs (default: from config)"
         Write-Host "  -ForceTokenRefresh    Clear cached token and re-authenticate"
         Write-Host "  -ShowDetails          Show detailed rotation info for all accounts"
-        Write-Host "  -ForceRotation        Trigger rotation for mismatched accounts"
         Write-Host "  -Help                 Show this help message"
         Write-Host "  -ShowConfig           Show current configuration"
         Write-Host "  -ClearConfig          Delete config file and reset all settings"
@@ -94,7 +85,6 @@ function Compare-OpaAdRotations {
         Write-Host "  Compare-OpaAdRotations"
         Write-Host "  Compare-OpaAdRotations -ShowDetails"
         Write-Host "  Compare-OpaAdRotations -ExportPath 'C:\Reports\report.csv'"
-        Write-Host "  Compare-OpaAdRotations -ForceRotation"
         Write-Host ""
         return
     }
@@ -342,25 +332,6 @@ function Compare-OpaAdRotations {
                 if ($result.OtherChangers) {
                     Write-Host "    Non-OPA changes: $($result.OtherChangers)" -ForegroundColor Yellow
                 }
-            }
-        }
-    }
-
-    # Force rotation for mismatched accounts
-    if ($ForceRotation -and $mismatches.Count -gt 0) {
-        Write-Host ""
-        Write-Host "Forcing Password Rotation for Mismatched Accounts" -ForegroundColor Cyan
-        Write-Host "==================================================" -ForegroundColor Cyan
-
-        foreach ($mismatch in $mismatches) {
-            Write-Host "  Rotating: $($mismatch.Account)..." -ForegroundColor Yellow -NoNewline
-            try {
-                $rotateEndpoint = "/v1/teams/$($config.team_name)/active_directory/$($connection.id)/accounts/$($mismatch.AccountId)/rotate_password"
-                $null = Invoke-OpaApiRequest -Endpoint $rotateEndpoint -Method 'POST' -Config $config
-                Write-Host " OK" -ForegroundColor Green
-            }
-            catch {
-                Write-Host " FAILED: $_" -ForegroundColor Red
             }
         }
     }
