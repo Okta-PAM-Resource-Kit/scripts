@@ -31,6 +31,9 @@
 .PARAMETER ShowConfig
     Display current configuration and config file path.
 
+.PARAMETER ClearConfig
+    Delete the config file to reset all settings.
+
 .EXAMPLE
     Compare-OpaAdRotations
     Run basic comparison with default settings.
@@ -64,7 +67,9 @@ function Compare-OpaAdRotations {
 
         [switch]$Help,
 
-        [switch]$ShowConfig
+        [switch]$ShowConfig,
+
+        [switch]$ClearConfig
     )
 
     if ($Help) {
@@ -83,6 +88,7 @@ function Compare-OpaAdRotations {
         Write-Host "  -ForceRotation        Trigger rotation for mismatched accounts"
         Write-Host "  -Help                 Show this help message"
         Write-Host "  -ShowConfig           Show current configuration"
+        Write-Host "  -ClearConfig          Delete config file and reset all settings"
         Write-Host ""
         Write-Host "EXAMPLES:" -ForegroundColor Yellow
         Write-Host "  Compare-OpaAdRotations"
@@ -109,11 +115,25 @@ function Compare-OpaAdRotations {
             Write-Host "  secrets_resource_group:     $($config.secrets_resource_group)"
             Write-Host "  secrets_project:            $($config.secrets_project)"
             Write-Host "  secrets_id:                 $($config.secrets_id)"
+            Write-Host "  secrets_key_id_name:        $($config.secrets_key_id_name)"
+            Write-Host "  secrets_key_secret_name:    $($config.secrets_key_secret_name)"
         }
         else {
             Write-Host "  (config file not found - will be created on first run)" -ForegroundColor Yellow
         }
         Write-Host ""
+        return
+    }
+
+    if ($ClearConfig) {
+        $configPath = Join-Path (Split-Path $script:ModuleRoot -Parent) 'config.json'
+        if (Test-Path $configPath) {
+            Remove-Item $configPath -Force
+            Write-Host "Config file deleted: $configPath" -ForegroundColor Green
+        }
+        else {
+            Write-Host "Config file not found: $configPath" -ForegroundColor Yellow
+        }
         return
     }
 

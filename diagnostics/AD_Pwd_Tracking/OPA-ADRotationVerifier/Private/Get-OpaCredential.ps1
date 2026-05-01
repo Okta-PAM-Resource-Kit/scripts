@@ -25,21 +25,23 @@ function Get-OpaCredential {
 
         $keyId = $null
         $keySecret = $null
+        $keyIdName = $Config.secrets_key_id_name
+        $keySecretName = $Config.secrets_key_secret_name
 
         foreach ($item in $secretData) {
-            if ($item.key_name -eq 'apikey') {
+            if ($item.key_name -eq $keyIdName) {
                 $keyId = $item.secret_value
             }
-            elseif ($item.key_name -eq 'apisecret') {
+            elseif ($item.key_name -eq $keySecretName) {
                 $keySecret = $item.secret_value
             }
         }
 
         if ([string]::IsNullOrWhiteSpace($keyId)) {
-            throw "Could not find 'apikey' in secret response"
+            throw "Could not find '$keyIdName' in secret response"
         }
         if ([string]::IsNullOrWhiteSpace($keySecret)) {
-            throw "Could not find 'apisecret' in secret response"
+            throw "Could not find '$keySecretName' in secret response"
         }
 
         Write-Host "API credentials retrieved successfully." -ForegroundColor Green
