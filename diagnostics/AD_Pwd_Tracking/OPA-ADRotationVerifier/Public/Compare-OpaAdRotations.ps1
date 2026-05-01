@@ -1,3 +1,52 @@
+<#
+.SYNOPSIS
+    Compares OPA AD credential rotations against actual AD password changes.
+
+.DESCRIPTION
+    Verifies that OPA-managed AD account password rotations match the actual
+    PasswordLastSet timestamps in Active Directory. Detects mismatches and
+    identifies password changes made by non-OPA processes.
+
+.PARAMETER ExportPath
+    Path to export results as CSV file.
+
+.PARAMETER Domain
+    AD domain to check. If not specified, auto-detects from local machine.
+
+.PARAMETER LookbackDays
+    Number of days to search event logs for password changes. Default from config.
+
+.PARAMETER ForceTokenRefresh
+    Clear cached bearer token and re-authenticate.
+
+.PARAMETER ShowDetails
+    Display detailed rotation information for all accounts.
+
+.PARAMETER ForceRotation
+    Trigger password rotation for accounts with mismatches.
+
+.PARAMETER Help
+    Display usage information.
+
+.PARAMETER ShowConfig
+    Display current configuration and config file path.
+
+.EXAMPLE
+    Compare-OpaAdRotations
+    Run basic comparison with default settings.
+
+.EXAMPLE
+    Compare-OpaAdRotations -ShowDetails
+    Run comparison and show detailed output for all accounts.
+
+.EXAMPLE
+    Compare-OpaAdRotations -ExportPath "C:\Reports\rotation-report.csv"
+    Run comparison and export results to CSV.
+
+.EXAMPLE
+    Compare-OpaAdRotations -ForceRotation
+    Run comparison and trigger rotation for mismatched accounts.
+#>
 function Compare-OpaAdRotations {
     [CmdletBinding()]
     param(
@@ -11,8 +60,62 @@ function Compare-OpaAdRotations {
 
         [switch]$ShowDetails,
 
-        [switch]$ForceRotation
+        [switch]$ForceRotation,
+
+        [switch]$Help,
+
+        [switch]$ShowConfig
     )
+
+    if ($Help) {
+        Write-Host ""
+        Write-Host "Compare-OpaAdRotations - Verify OPA AD credential rotations" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "USAGE:" -ForegroundColor Yellow
+        Write-Host "  Compare-OpaAdRotations [options]"
+        Write-Host ""
+        Write-Host "OPTIONS:" -ForegroundColor Yellow
+        Write-Host "  -ExportPath <path>    Export results to CSV file"
+        Write-Host "  -Domain <domain>      AD domain to check (default: auto-detect)"
+        Write-Host "  -LookbackDays <n>     Days to search event logs (default: from config)"
+        Write-Host "  -ForceTokenRefresh    Clear cached token and re-authenticate"
+        Write-Host "  -ShowDetails          Show detailed rotation info for all accounts"
+        Write-Host "  -ForceRotation        Trigger rotation for mismatched accounts"
+        Write-Host "  -Help                 Show this help message"
+        Write-Host "  -ShowConfig           Show current configuration"
+        Write-Host ""
+        Write-Host "EXAMPLES:" -ForegroundColor Yellow
+        Write-Host "  Compare-OpaAdRotations"
+        Write-Host "  Compare-OpaAdRotations -ShowDetails"
+        Write-Host "  Compare-OpaAdRotations -ExportPath 'C:\Reports\report.csv'"
+        Write-Host "  Compare-OpaAdRotations -ForceRotation"
+        Write-Host ""
+        return
+    }
+
+    if ($ShowConfig) {
+        $configPath = Join-Path (Split-Path $script:ModuleRoot -Parent) 'config.json'
+        Write-Host ""
+        Write-Host "Configuration" -ForegroundColor Cyan
+        Write-Host "=============" -ForegroundColor Cyan
+        Write-Host "Config file: $configPath"
+        Write-Host ""
+        if (Test-Path $configPath) {
+            $config = Get-Content $configPath -Raw | ConvertFrom-Json
+            Write-Host "  opa_url:                    $($config.opa_url)"
+            Write-Host "  team_name:                  $($config.team_name)"
+            Write-Host "  timestamp_tolerance_seconds: $($config.timestamp_tolerance_seconds)"
+            Write-Host "  event_lookback_days:        $($config.event_lookback_days)"
+            Write-Host "  secrets_resource_group:     $($config.secrets_resource_group)"
+            Write-Host "  secrets_project:            $($config.secrets_project)"
+            Write-Host "  secrets_id:                 $($config.secrets_id)"
+        }
+        else {
+            Write-Host "  (config file not found - will be created on first run)" -ForegroundColor Yellow
+        }
+        Write-Host ""
+        return
+    }
 
     # Clear cached token if force refresh requested
     if ($ForceTokenRefresh) {
