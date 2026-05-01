@@ -75,21 +75,58 @@ Get-ChildItem -Path "$modulePath\..\Update-GroupRoles.ps1" | Unblock-File
 
 ### Import and Run
 
+Import the module (use -Force to reload if already imported):
+
 ```powershell
-# Import module (use -Force to reload if already imported)
 Import-Module OPA-ADRotationVerifier -Force
+```
 
-# First run - will prompt for OPA URL, Team Name, and API credentials
+Show help and available options:
+
+```powershell
+Compare-OpaAdRotations -Help
+```
+
+Show current configuration and config file path:
+
+```powershell
+Compare-OpaAdRotations -ShowConfig
+```
+
+Run basic comparison (first run will prompt for OPA URL, Team Name, and API credentials):
+
+```powershell
 Compare-OpaAdRotations
+```
 
-# Run with verbose output
+Run with verbose output:
+
+```powershell
 Compare-OpaAdRotations -Verbose
+```
 
-# Export results to CSV
+Show detailed rotation info for all accounts:
+
+```powershell
+Compare-OpaAdRotations -ShowDetails
+```
+
+Export results to CSV:
+
+```powershell
 Compare-OpaAdRotations -ExportPath "C:\Reports\rotation-report.csv"
+```
 
-# Force token refresh
+Force token refresh (clear cached bearer token):
+
+```powershell
 Compare-OpaAdRotations -ForceTokenRefresh
+```
+
+Trigger password rotation for mismatched accounts:
+
+```powershell
+Compare-OpaAdRotations -ForceRotation
 ```
 
 ## Configuration
