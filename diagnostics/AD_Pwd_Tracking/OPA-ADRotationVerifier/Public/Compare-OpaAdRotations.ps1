@@ -356,12 +356,17 @@ function Compare-OpaAdRotations {
 
         foreach ($mismatch in $mismatches) {
             Write-Host "  Rotating: $($mismatch.Account)..." -ForegroundColor Yellow -NoNewline
+            Write-Verbose "    AccountId: $($mismatch.AccountId)"
+            Write-Verbose "    ResourceGroupId: $($mismatch.ResourceGroupId)"
+            Write-Verbose "    ProjectId: $($mismatch.ProjectId)"
             try {
                 $rotateEndpoint = "/v1/teams/$($config.team_name)/resource_groups/$($mismatch.ResourceGroupId)/projects/$($mismatch.ProjectId)/rotate_resource"
                 $rotateBody = @{
                     resource_id = $mismatch.AccountId
                     resource_type = 'pam_ad_account_password_login'
                 }
+                Write-Verbose "    Endpoint: $rotateEndpoint"
+                Write-Verbose "    Body: $($rotateBody | ConvertTo-Json -Compress)"
                 $null = Invoke-OpaApiRequest -Endpoint $rotateEndpoint -Method 'POST' -Body $rotateBody -Config $config
                 Write-Host " OK" -ForegroundColor Green
             }
