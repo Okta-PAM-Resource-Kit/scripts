@@ -11,7 +11,9 @@ function Compare-OpaAdRotations {
 
         [switch]$ShowDetails,
 
-        [switch]$ForceRotation
+        [switch]$ForceRotation,
+
+        [switch]$ValidateTimestamps
     )
 
     # Clear cached token if force refresh requested
@@ -42,7 +44,9 @@ function Compare-OpaAdRotations {
     Write-Host ""
 
     Write-Host "Fetching managed accounts..." -ForegroundColor Yellow
-    $accounts = Get-OpaAdAccounts -ConnectionId $connection.id
+    $accountParams = @{ ConnectionId = $connection.id }
+    if ($ValidateTimestamps) { $accountParams.ValidateTimestamps = $true }
+    $accounts = Get-OpaAdAccounts @accountParams
     Write-Host "Found $($accounts.Count) managed accounts" -ForegroundColor Green
     Write-Host ""
 
