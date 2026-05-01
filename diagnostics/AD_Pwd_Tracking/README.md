@@ -101,6 +101,12 @@ Show current configuration and config file path:
 Compare-OpaAdRotations -ShowConfig
 ```
 
+Clear configuration and reset all settings:
+
+```powershell
+Compare-OpaAdRotations -ClearConfig
+```
+
 Run basic comparison (first run will prompt for OPA URL, Team Name, and API credentials):
 
 ```powershell
