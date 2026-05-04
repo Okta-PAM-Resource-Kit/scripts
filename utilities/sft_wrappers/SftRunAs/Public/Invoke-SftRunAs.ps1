@@ -176,7 +176,7 @@ Special Commands:
       Write-Host "Authenticating with Okta Privileged Access..." -ForegroundColor Cyan
       Invoke-Sft -MyArgs (@("login") + $teamArgs) | Out-Null
       Write-Host "Retrieving credentials for $AdUsername@$AdDomainFqdn..." -ForegroundColor Cyan
-      $out = Invoke-Sft -MyArgs (@("ad","reveal","--domain",$AdDomainFqdn,"--ad-account",$AdUsername) + $teamArgs)
+      $out = Invoke-Sft -MyArgs (@("ad","reveal","--raw","--domain",$AdDomainFqdn,"--ad-account",$AdUsername) + $teamArgs)
 
       # Filter output to find the password line
       $pwLine = $out | Where-Object { $_ -and $_.Trim().Length -gt 0 -and $_ -notmatch 'PASSWORD\s+ACCOUNT' -and $_ -notmatch 'Session expires' } | Select-Object -First 1
