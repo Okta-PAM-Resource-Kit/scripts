@@ -6,19 +6,32 @@ Automated installation and configuration of PostgreSQL or MySQL with OPA orchest
 
 ## Quick Start
 
+**Install PostgreSQL, create database, scoped users (recommended for testing)**
 ```bash
-# Download
 curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/linux/databases/LinuxOpaDbSetup.sh
 chmod +x LinuxOpaDbSetup.sh
-
-# Install PostgreSQL, create database, scoped users (recommended for testing)
 ./LinuxOpaDbSetup.sh -p -D testdb -c -e
+```
 
-# Install MySQL, create database, scoped users
+**Install MySQL, create database, scoped users**
+```bash
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/linux/databases/LinuxOpaDbSetup.sh
+chmod +x LinuxOpaDbSetup.sh
 ./LinuxOpaDbSetup.sh -m -D myapp_db -c -e
+```
 
-# Install PostgreSQL with global users (cluster-wide privileges)
-./LinuxOpaDbSetup.sh -p -g -e
+**Install PostgreSQL with global users (cluster-wide privileges)**
+```bash
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/linux/databases/LinuxOpaDbSetup.sh
+chmod +x LinuxOpaDbSetup.sh
+./LinuxOpaDbSetup.sh -p -g -s -e
+```
+
+**Install MySQL with global users (cluster-wide privileges)**
+```bash
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/linux/databases/LinuxOpaDbSetup.sh
+chmod +x LinuxOpaDbSetup.sh
+./LinuxOpaDbSetup.sh -m -g -s -e
 ```
 
 ## Requirements
