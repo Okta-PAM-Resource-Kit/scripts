@@ -15,13 +15,8 @@ This is a simple command shell script that will install a specific version of th
 Script usage:
 
 ```bash
-cmd /c "curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/refs/heads/main/installation/windows/Okta-OPA-server-Windows.cmd"
-```
-
-Update the script with the target version, then execute with:
-
-```bash
-Okta-OPA-server-Windows.cmd
+cmd /c "curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/refs/heads/main/installation/windows/OPA-Windows-Server-Installer.cmd"
+OPA-Windows-Server-Installer.cmd /token:<enrollment_token>
 ```
 
 
