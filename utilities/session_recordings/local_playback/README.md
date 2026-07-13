@@ -35,14 +35,14 @@ To use the scripts:
 
 asciinema.sh
 ```bash
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/session_recordings/asciinema.sh
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/session_recordings/local_playback/asciinema.sh
 chmod +x asciinema.sh
 ./asciinema.sh install
 ```
 
 ssh_playback.sh
 ```bash
-curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/session_recordings/ssh_playback.sh
+curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/main/utilities/session_recordings/local_playback/ssh_playback.sh
 chmod +x ssh_playback.sh
 ./ssh_playback.sh inactive
 ```
