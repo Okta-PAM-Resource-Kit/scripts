@@ -386,12 +386,18 @@ if not "!SPECIFIC_VERSION!"=="" (
 )
 
 :: Download MSI to temp file (msiexec /i does not support HTTP URLs on modern Windows)
-set TEMP_MSI=%TEMP%\sftd_installer.msi
-call :Log "INFO: Downloading OPA Server Agent MSI from !MSI_URL!..."
+set TEMP_MSI=C:\Okta\sftd_installer.msi
+if not exist "C:\Okta" mkdir "C:\Okta"
+call :Log "INFO: Downloading OPA Server Agent MSI to !TEMP_MSI!..."
+call :Log "INFO: Source URL: !MSI_URL!"
 powershell -Command "try { Invoke-WebRequest -Uri '!MSI_URL!' -OutFile '!TEMP_MSI!' -UseBasicParsing -ErrorAction Stop } catch { exit 1 }"
 if !errorlevel! neq 0 (
     call :Log "ERROR: Failed to download MSI from !MSI_URL!"
     call :Log "ERROR: Check network connectivity and URL availability"
+    exit /b 1
+)
+if not exist "!TEMP_MSI!" (
+    call :Log "ERROR: Download appeared to succeed but MSI file not found at !TEMP_MSI!"
     exit /b 1
 )
 call :Log "INFO: MSI downloaded successfully"
