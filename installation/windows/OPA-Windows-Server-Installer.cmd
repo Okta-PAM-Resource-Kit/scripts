@@ -10,7 +10,7 @@ setlocal enabledelayedexpansion
 ::
 :: Options:
 ::   /token:VALUE      - Enrollment token (optional)
-::                       If not provided and default is <enrollment_token>, agent installs
+::                       If not provided and default is enrollment_token, agent installs
 ::                       without enrollment (manual enrollment required later)
 ::   /version:VALUE    - Specific agent version like "1.75.2" (optional, uses latest)
 ::   /reenroll         - Force re-enrollment: deletes enrollment flag and state directory
@@ -43,7 +43,7 @@ set TEMP_JSON=%TEMP%\scaleft_dull.json
 set SFTD_EXE="C:\Program Files\ScaleFT\Server Agent\sftd.exe"
 
 :: Default enrollment token (can be overridden via command line)
-set DEFAULT_TOKEN=<enrollment_token>
+set DEFAULT_TOKEN=enrollment_token
 
 :: ============================================================================
 :: Parse command line switches
@@ -119,7 +119,7 @@ goto :parse_args
 
 :: Log parsed parameters and check if enrollment token is available
 set SKIP_ENROLLMENT=0
-if "!enrollment_token!"=="<enrollment_token>" (
+if "!enrollment_token!"=="enrollment_token" (
     set SKIP_ENROLLMENT=1
     call :Log "INFO: No enrollment token provided - agent will be installed without enrollment"
     call :Log "INFO: You can enroll the agent manually after installation"
@@ -470,7 +470,7 @@ echo Usage: %~nx0 [OPTIONS]
 echo.
 echo Options:
 echo   /token:VALUE      - Enrollment token (optional)
-echo                       If not provided and default is ^<enrollment_token^>, agent installs
+echo                       If not provided and default is enrollment_token, agent installs
 echo                       without enrollment (manual enrollment required later)
 echo   /version:VALUE    - Specific agent version like "1.75.2" (optional, uses latest)
 echo   /reenroll         - Force re-enrollment: deletes enrollment flag and state directory
