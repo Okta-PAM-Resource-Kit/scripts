@@ -40,10 +40,10 @@ set ENROLLMENT_FLAG=%CONFIG_DIR%\enrollment.complete
 set JSON_URL=https://dist.scaleft.com/repos/windows/stable/amd64/server-tools/dull.json
 set BASE_URL=https://dist.scaleft.com/repos/windows/stable/amd64/server-tools
 set TEMP_JSON=%TEMP%\scaleft_dull.json
-set SFTD_EXE=C:\Program Files\ScaleFT\Server Agent\sftd.exe
+set SFTD_EXE="C:\Program Files\ScaleFT\Server Agent\sftd.exe"
 
 :: Default enrollment token (can be overridden via command line)
-set "DEFAULT_TOKEN=<enrollment_token>"
+set DEFAULT_TOKEN="<enrollment_token>"
 
 :: ============================================================================
 :: Parse command line switches
