@@ -43,7 +43,7 @@ set TEMP_JSON=%TEMP%\scaleft_dull.json
 set SFTD_EXE="C:\Program Files\ScaleFT\Server Agent\sftd.exe"
 
 :: Default enrollment token (can be overridden via command line)
-set DEFAULT_TOKEN="<enrollment_token>"
+set DEFAULT_TOKEN=<enrollment_token>
 
 :: ============================================================================
 :: Parse command line switches
@@ -94,13 +94,8 @@ if /i "!arg!"=="/force" (
 :: Check for /token switch (support both : and = separators)
 echo !arg! | findstr /i "^/token[:=]" >nul
 if !errorlevel! equ 0 (
-    :: Extract value after /token: or /token=
-    set temp_arg=!arg!
-    set temp_arg=!temp_arg:/token:=!
-    set temp_arg=!temp_arg:/token=!
-    set temp_arg=!temp_arg:/TOKEN:=!
-    set temp_arg=!temp_arg:/TOKEN=!
-    set enrollment_token=!temp_arg!
+    :: Extract value after /token: or /token= (both are 7 chars)
+    set enrollment_token=!arg:~7!
     set TOKEN_PROVIDED=1
     shift
     goto :parse_args
@@ -109,13 +104,8 @@ if !errorlevel! equ 0 (
 :: Check for /version switch (support both : and = separators)
 echo !arg! | findstr /i "^/version[:=]" >nul
 if !errorlevel! equ 0 (
-    :: Extract value after /version: or /version=
-    set temp_arg=!arg!
-    set temp_arg=!temp_arg:/version:=!
-    set temp_arg=!temp_arg:/version=!
-    set temp_arg=!temp_arg:/VERSION:=!
-    set temp_arg=!temp_arg:/VERSION=!
-    set SPECIFIC_VERSION=!temp_arg!
+    :: Extract value after /version: or /version= (both are 9 chars)
+    set SPECIFIC_VERSION=!arg:~9!
     shift
     goto :parse_args
 )
@@ -219,7 +209,7 @@ if !FORCE_REINSTALL! equ 1 (
     :: Uninstall existing agent
     if exist "%SFTD_EXE%" (
         call :Log "INFO: Uninstalling existing OPA agent..."
-        wmic product where "name like '%%ScaleFT%%'" call uninstall /nointeractive >nul 2>&1
+        powershell -Command "Get-CimInstance -ClassName Win32_Product | Where-Object { $_.Name -like '*ScaleFT*' } | ForEach-Object { $_.Uninstall() }" >nul 2>&1
         timeout /t 10 /nobreak >nul
         if exist "%SFTD_EXE%" (
             call :Log "WARNING: Agent executable still exists after uninstall attempt"
@@ -395,15 +385,28 @@ if not "!SPECIFIC_VERSION!"=="" (
     if exist "%TEMP_JSON%" del "%TEMP_JSON%" 2>nul
 )
 
+:: Download MSI to temp file (msiexec /i does not support HTTP URLs on modern Windows)
+set TEMP_MSI=%TEMP%\sftd_installer.msi
+call :Log "INFO: Downloading OPA Server Agent MSI from !MSI_URL!..."
+powershell -Command "try { Invoke-WebRequest -Uri '!MSI_URL!' -OutFile '!TEMP_MSI!' -UseBasicParsing -ErrorAction Stop } catch { exit 1 }"
+if !errorlevel! neq 0 (
+    call :Log "ERROR: Failed to download MSI from !MSI_URL!"
+    call :Log "ERROR: Check network connectivity and URL availability"
+    exit /b 1
+)
+call :Log "INFO: MSI downloaded successfully"
+
 :: Install OPA Server Agent
-call :Log "INFO: Installing Okta OPA Server Agent from %MSI_URL%..."
+call :Log "INFO: Installing Okta OPA Server Agent..."
 call :Log "INFO: This may take several minutes..."
-msiexec /qn /i "%MSI_URL%" /L*V "C:\sftd_install.log"
+msiexec /qn /i "!TEMP_MSI!" /L*V "C:\sftd_install.log"
 if !errorlevel! neq 0 (
     call :Log "ERROR: Failed to install OPA Server Agent (Exit Code: !errorlevel!)"
     call :Log "ERROR: Check C:\sftd_install.log for details"
+    if exist "!TEMP_MSI!" del "!TEMP_MSI!" 2>nul
     exit /b 1
 )
+if exist "!TEMP_MSI!" del "!TEMP_MSI!" 2>nul
 call :Log "INFO: Successfully installed Okta OPA Server Agent"
 
 :: Verify installation
@@ -496,7 +499,7 @@ exit /b 0
 :: ============================================================================
 :Log
 set msg=%~1
-for /f "tokens=1-3 delims=/" %%a in ('echo %date%') do set current_date=%%c-%%a-%%b
+for /f "tokens=2-4 delims=/ " %%a in ('echo %date%') do set current_date=%%c-%%a-%%b
 for /f "tokens=1-2 delims=: " %%a in ('echo %time%') do set current_time=%%a:%%b
 echo [%current_date% %current_time%] %msg%
 echo [%current_date% %current_time%] %msg% >> "%LOG_FILE%"
