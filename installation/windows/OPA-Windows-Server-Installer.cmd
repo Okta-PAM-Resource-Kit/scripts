@@ -36,6 +36,7 @@ set CONFIG_DIR=C:\Windows\System32\config\systemprofile\AppData\Local\ScaleFT
 set STATE_DIR=%CONFIG_DIR%\state
 set YAML_FILE=%CONFIG_DIR%\sftd.yaml
 set TOKEN_FILE=%CONFIG_DIR%\enrollment.token
+set DEVICE_TOKEN_FILE=%CONFIG_DIR%\device.token
 set ENROLLMENT_FLAG=%CONFIG_DIR%\enrollment.complete
 set JSON_URL=https://dist.scaleft.com/repos/windows/stable/amd64/server-tools/dull.json
 set BASE_URL=https://dist.scaleft.com/repos/windows/stable/amd64/server-tools
@@ -55,6 +56,9 @@ set SPECIFIC_VERSION=
 set FORCE_REENROLL=0
 set FORCE_REINSTALL=0
 set TOKEN_PROVIDED=0
+
+:: Raw command line: cmd treats = as an argument delimiter, so %~1 loses trailing ==
+set "RAW_ARGS=%*"
 
 :: Parse all command line arguments
 :parse_args
@@ -96,6 +100,12 @@ echo !arg! | findstr /i "^/token[:=]" >nul
 if !errorlevel! equ 0 (
     :: Extract value after /token: or /token= (both are 7 chars)
     set enrollment_token=!arg:~7!
+    :: Recover trailing = padding (base64) that cmd strips from arguments
+    set "RAW_AFTER=!RAW_ARGS:*/token=!"
+    set "RAW_AFTER=!RAW_AFTER:~1!"
+    set "RAW_TOKEN="
+    for /f "tokens=1" %%t in ("!RAW_AFTER!") do set "RAW_TOKEN=%%~t"
+    if defined RAW_TOKEN set "enrollment_token=!RAW_TOKEN!"
     set TOKEN_PROVIDED=1
     shift
     goto :parse_args
@@ -213,12 +223,14 @@ if !FORCE_REINSTALL! equ 1 (
         timeout /t 10 /nobreak >nul
         if exist "%SFTD_EXE%" (
             call :Log "WARNING: Agent executable still exists after uninstall attempt"
+            call :Log "WARNING: Proceeding with fresh installation attempt"
         ) else (
             call :Log "INFO: Agent uninstalled successfully"
         )
+    ) else (
+        call :Log "INFO: No existing agent installation found"
     )
-
-    call :Log "INFO: Agent uninstalled - will proceed with fresh installation"
+    call :Log "INFO: Proceeding with fresh installation"
 )
 
 :: ============================================================================
@@ -230,33 +242,48 @@ if !FORCE_REENROLL! equ 0 if !FORCE_REINSTALL! equ 0 (
 
     :: Check if enrollment completion flag exists
     if exist "%ENROLLMENT_FLAG%" (
-        call :Log "INFO: Enrollment flag found - OPA agent already enrolled"
-        call :Log "INFO: Skipping enrollment to prevent duplicate registration"
-        echo.
-        echo ============================================================================
-        echo OPA agent is already enrolled. Skipping installation.
-        echo To force re-enrollment, run with /reenroll flag
-        echo To force reinstallation, run with /reinstall flag
-        echo Enrollment flag: %ENROLLMENT_FLAG%
-        echo ============================================================================
-        exit /b 0
+        :: Enrollment is only confirmed when device.token exists and enrollment.token is absent
+        if not exist "%TOKEN_FILE%" (
+            if exist "%DEVICE_TOKEN_FILE%" (
+                call :Log "INFO: Enrollment verified - device.token present, enrollment.token absent"
+                call :Log "INFO: Skipping enrollment to prevent duplicate registration"
+                echo.
+                echo ============================================================================
+                echo OPA agent is already enrolled. Skipping installation.
+                echo To force re-enrollment, run with /reenroll flag
+                echo To force reinstallation, run with /reinstall flag
+                echo ============================================================================
+                exit /b 0
+            )
+        )
+        call :Log "WARNING: Enrollment flag found but enrollment is not confirmed"
+        if exist "%TOKEN_FILE%" call :Log "WARNING: enrollment.token still present - enrollment may be in progress or failed"
+        if not exist "%DEVICE_TOKEN_FILE%" call :Log "WARNING: device.token not found - enrollment has not completed"
+        call :Log "WARNING: Clearing enrollment flag and proceeding with re-enrollment"
+        del /f /q "%ENROLLMENT_FLAG%" 2>nul
     )
 
-    :: Check if service is already running
+    :: Check if service is already running and enrollment is confirmed
     sc query "ScaleFT Server Agent" 2>nul | find "RUNNING" >nul
     if !errorlevel! equ 0 (
         call :Log "INFO: ScaleFT Server Agent service is running"
-        call :Log "INFO: Skipping enrollment to prevent duplicate registration"
+        if not exist "%TOKEN_FILE%" (
+            if exist "%DEVICE_TOKEN_FILE%" (
+                call :Log "INFO: Enrollment confirmed - device.token present, enrollment.token absent"
+                call :Log "INFO: Skipping enrollment to prevent duplicate registration"
 
-        :: Create enrollment flag for future boots
-        if not exist "%CONFIG_DIR%" mkdir "%CONFIG_DIR%" 2>nul
-        echo Enrolled > "%ENROLLMENT_FLAG%"
+                :: Create enrollment flag for future boots
+                if not exist "%CONFIG_DIR%" mkdir "%CONFIG_DIR%" 2>nul
+                echo Enrolled on %date% at %time% > "%ENROLLMENT_FLAG%"
 
-        echo.
-        echo ============================================================================
-        echo OPA agent is already enrolled and running. Skipping installation.
-        echo ============================================================================
-        exit /b 0
+                echo.
+                echo ============================================================================
+                echo OPA agent is already enrolled and running. Skipping installation.
+                echo ============================================================================
+                exit /b 0
+            )
+        )
+        call :Log "INFO: Service is running but enrollment not yet confirmed - enrollment may still be in progress"
     )
 
     :: Check if agent executable exists (installed but maybe not running yet)
@@ -267,16 +294,21 @@ if !FORCE_REENROLL! equ 0 if !FORCE_REINSTALL! equ 0 (
         sc start "ScaleFT Server Agent" 2>nul
         if !errorlevel! equ 0 (
             call :Log "INFO: Successfully started ScaleFT Server Agent service"
+            call :Log "INFO: Waiting for enrollment to complete..."
+            call :WaitForEnrollment
+            if !errorlevel! equ 0 (
+                :: Create enrollment flag only after enrollment is confirmed
+                if not exist "%CONFIG_DIR%" mkdir "%CONFIG_DIR%" 2>nul
+                echo Enrolled on %date% at %time% > "%ENROLLMENT_FLAG%"
 
-            :: Create enrollment flag for future boots
-            if not exist "%CONFIG_DIR%" mkdir "%CONFIG_DIR%" 2>nul
-            echo Enrolled > "%ENROLLMENT_FLAG%"
-
-            echo.
-            echo ============================================================================
-            echo OPA agent was already installed. Service has been started.
-            echo ============================================================================
-            exit /b 0
+                echo.
+                echo ============================================================================
+                echo OPA agent was already installed. Service started and enrollment confirmed.
+                echo ============================================================================
+                exit /b 0
+            ) else (
+                call :Log "WARNING: Service started but enrollment did not complete - will attempt reinstallation"
+            )
         ) else (
             call :Log "WARNING: Failed to start service - will attempt reinstallation"
         )
@@ -318,7 +350,7 @@ if !errorlevel! neq 0 (
     call :Log "ERROR: Failed to create sftd.yaml file"
     exit /b 1
 )
-echo BrokeredLoginGracePeriodInSeconds: 30 >> "%YAML_FILE%"
+echo BrokeredLoginGracePeriodInSeconds: 60 >> "%YAML_FILE%"
 if !errorlevel! neq 0 (
     call :Log "ERROR: Failed to append to sftd.yaml file"
     exit /b 1
@@ -400,7 +432,13 @@ if not exist "!TEMP_MSI!" (
     call :Log "ERROR: Download appeared to succeed but MSI file not found at !TEMP_MSI!"
     exit /b 1
 )
-call :Log "INFO: MSI downloaded successfully"
+for %%A in ("!TEMP_MSI!") do set MSI_SIZE=%%~zA
+if !MSI_SIZE! lss 1000000 (
+    call :Log "ERROR: Downloaded file is too small (!MSI_SIZE! bytes) - may be an error page, not an MSI"
+    if exist "!TEMP_MSI!" del "!TEMP_MSI!" 2>nul
+    exit /b 1
+)
+call :Log "INFO: MSI downloaded successfully (!MSI_SIZE! bytes)"
 
 :: Install OPA Server Agent
 call :Log "INFO: Installing Okta OPA Server Agent..."
@@ -423,27 +461,36 @@ if exist "%SFTD_EXE%" (
     call :Log "WARNING: sftd.exe not found at expected location"
 )
 
-:: Create enrollment completion flag to prevent re-enrollment on reboot
-call :Log "INFO: Creating enrollment completion flag..."
-echo Enrolled on %date% at %time% > "%ENROLLMENT_FLAG%"
-if !errorlevel! equ 0 (
-    call :Log "INFO: Enrollment flag created at: %ENROLLMENT_FLAG%"
-) else (
-    call :Log "WARNING: Failed to create enrollment flag - script may re-run on reboot"
-)
-
 if !SKIP_ENROLLMENT! equ 0 (
-    call :Log "SUCCESS: Okta OPA enrollment completed successfully"
-    echo.
-    echo ============================================================================
-    echo Enrollment completed successfully!
-    echo Log file: %LOG_FILE%
-    echo Installation log: C:\sftd_install.log
-    echo Enrollment flag: %ENROLLMENT_FLAG%
-    echo.
-    echo This script will not run again on future reboots unless the enrollment
-    echo flag is deleted or the service is uninstalled.
-    echo ============================================================================
+    :: Wait for the agent to consume enrollment.token and create device.token
+    call :Log "INFO: Waiting for enrollment to complete..."
+    call :WaitForEnrollment
+    if !errorlevel! equ 0 (
+        :: Create enrollment flag only after enrollment is confirmed
+        echo Enrolled on %date% at %time% > "%ENROLLMENT_FLAG%"
+        call :Log "INFO: Enrollment flag created at: %ENROLLMENT_FLAG%"
+        call :Log "SUCCESS: Okta OPA enrollment completed successfully"
+        echo.
+        echo ============================================================================
+        echo Enrollment completed successfully!
+        echo Log file: %LOG_FILE%
+        echo Installation log: C:\sftd_install.log
+        echo Enrollment flag: %ENROLLMENT_FLAG%
+        echo.
+        echo This script will not run again on future reboots unless the enrollment
+        echo flag is deleted or the service is uninstalled.
+        echo ============================================================================
+    ) else (
+        call :Log "ERROR: Enrollment did not complete within the expected time"
+        call :Log "ERROR: enrollment.token was not consumed or device.token was not created"
+        call :Log "ERROR: Check the OPA agent logs for details"
+        echo.
+        echo ============================================================================
+        echo Installation succeeded but enrollment confirmation timed out.
+        echo The agent may still complete enrollment - check logs.
+        echo Log file: %LOG_FILE%
+        echo ============================================================================
+    )
 ) else (
     call :Log "SUCCESS: Okta OPA agent installed successfully (without enrollment)"
     echo.
@@ -499,6 +546,29 @@ echo   %~nx0 /token:eyJzIjoi... /version:1.75.2 /reenroll /reinstall
 echo.
 echo ============================================================================
 exit /b 0
+
+:: ============================================================================
+:: Wait for enrollment: polls until enrollment.token absent AND device.token present
+:: Returns 0 on success, 1 on timeout (120 seconds, polling every 5 seconds)
+:: ============================================================================
+:WaitForEnrollment
+setlocal
+set /a WAIT_COUNT=0
+set /a WAIT_MAX=24
+:WaitLoop
+if !WAIT_COUNT! geq !WAIT_MAX! (
+    endlocal
+    exit /b 1
+)
+if not exist "%TOKEN_FILE%" (
+    if exist "%DEVICE_TOKEN_FILE%" (
+        endlocal
+        exit /b 0
+    )
+)
+set /a WAIT_COUNT+=1
+timeout /t 5 /nobreak >nul
+goto :WaitLoop
 
 :: ============================================================================
 :: Logging function with timestamp
