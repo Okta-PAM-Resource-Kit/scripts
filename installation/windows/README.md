@@ -16,7 +16,7 @@ Script usage:
 
 ```bash
 cmd /c "curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/refs/heads/main/installation/windows/OPA-Windows-Server-Installer.cmd"
-OPA-Windows-Server-Installer.cmd /token:<enrollment_token>
+cmd /c "OPA-Windows-Server-Installer.cmd /token:<enrollment_token>"
 ```
 
 
