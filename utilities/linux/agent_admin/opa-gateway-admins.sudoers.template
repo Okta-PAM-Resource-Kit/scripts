@@ -1,0 +1,161 @@
+# /etc/sudoers.d/opa-gateway-admins
+#
+# Lets a non-root operator group fully manage an OPA (Okta Privileged
+# Access / ScaleFT) Gateway host without full sudo rights.
+#
+# Install:
+#   groupadd sftadmins                      # once per host
+#   usermod -aG sftadmins <username>        # per operator
+#   visudo -cf opa-gateway-admins.sudoers.template
+#   install -m 0440 -o root -g root opa-gateway-admins.sudoers.template \
+#       /etc/sudoers.d/opa-gateway-admins
+#
+# Before deploying, verify these binary paths against the target host
+# (e.g. `command -v systemctl`, `command -v sftd`) — some distros keep
+# sftd/sft-gatewayd under /usr/sbin instead of /usr/bin, and non
+# usr-merged systems may split /bin from /usr/bin.
+#
+# Known limitation: sudoers wildcards match "/" like any other character,
+# so a pattern such as /etc/sft/* also matches a crafted path like
+# /etc/sft/../../etc/passwd. These rules assume a trusted operator, not a
+# hostile one. If that assumption doesn't hold, replace the file-management
+# rules below with a small wrapper script that canonicalizes (realpath) its
+# target before acting, and grant sudo to the wrapper instead of to rm/cp/mv
+# directly.
+
+## ---- Service control: start/stop/restart/enable/disable the gateway units ----
+# The actual systemd unit names are sftd and sft-gatewayd (not a
+# "scaleft-*" prefix). Listed without the ".service" suffix, which
+# systemctl treats as equivalent to with it — add the ".service" form
+# too if whatever invokes this always types it explicitly.
+Cmnd_Alias SFT_SERVICE = /usr/bin/systemctl start sftd, /usr/bin/systemctl start sft-gatewayd, \
+                         /usr/bin/systemctl stop sftd, /usr/bin/systemctl stop sft-gatewayd, \
+                         /usr/bin/systemctl restart sftd, /usr/bin/systemctl restart sft-gatewayd, \
+                         /usr/bin/systemctl enable sftd, /usr/bin/systemctl enable sft-gatewayd, \
+                         /usr/bin/systemctl disable sftd, /usr/bin/systemctl disable sft-gatewayd
+
+## ---- Package management: install/update/remove scaleft- packages ----
+# Debian/Ubuntu (apt/dpkg)
+Cmnd_Alias SFT_PKG_DEB = /usr/bin/apt-get install scaleft-*, \
+                         /usr/bin/apt-get install --only-upgrade scaleft-*, \
+                         /usr/bin/apt-get remove scaleft-*, \
+                         /usr/bin/apt-get purge scaleft-*, \
+                         /usr/bin/apt install scaleft-*, \
+                         /usr/bin/apt remove scaleft-*, \
+                         /usr/bin/apt purge scaleft-*, \
+                         /usr/bin/dpkg -i *scaleft*.deb, \
+                         /usr/bin/dpkg -r scaleft-*, \
+                         /usr/bin/dpkg --purge scaleft-*
+
+# RHEL/CentOS/Rocky/Alma (yum/dnf/rpm)
+Cmnd_Alias SFT_PKG_RPM = /usr/bin/yum install -y scaleft-*, \
+                         /usr/bin/yum update -y scaleft-*, \
+                         /usr/bin/yum remove -y scaleft-*, \
+                         /usr/bin/dnf install -y scaleft-*, \
+                         /usr/bin/dnf update -y scaleft-*, \
+                         /usr/bin/dnf remove -y scaleft-*, \
+                         /usr/bin/rpm -i *scaleft*.rpm, \
+                         /usr/bin/rpm -U *scaleft*.rpm, \
+                         /usr/bin/rpm -e scaleft-*
+
+## ---- Support bundles: sftd/sft-gatewayd collect+submit to Okta support ----
+Cmnd_Alias SFT_SUPPORT = /usr/bin/sftd support collect, /usr/bin/sftd support collect *, \
+                         /usr/bin/sftd support submit, /usr/bin/sftd support submit *, \
+                         /usr/bin/sft-gatewayd support collect, /usr/bin/sft-gatewayd support collect *, \
+                         /usr/bin/sft-gatewayd support submit, /usr/bin/sft-gatewayd support submit *
+
+## ---- Config/state file editing ----
+# sudoedit is used instead of raw vi/vim/nano: granting "sudo vi <file>"
+# also grants the editor's :!shell escape, i.e. a root shell. sudoedit
+# copies the file out, lets the operator edit it as themselves, then
+# reinstalls it as root — no shell escape possible.
+Cmnd_Alias SFT_EDIT = sudoedit /etc/sft/*, \
+                      sudoedit /var/lib/sftd/*, \
+                      sudoedit /var/lib/sft-gatewayd/*, \
+                      sudoedit /var/log/sft/sessions/*
+
+## ---- File lifecycle ops (create/delete/move/perms) sudoedit doesn't cover ----
+Cmnd_Alias SFT_FILES = /usr/bin/rm /etc/sft/*, /usr/bin/rm -r /etc/sft/*, /usr/bin/rm -f /etc/sft/*, /usr/bin/rm -rf /etc/sft/*, \
+                       /usr/bin/mkdir /etc/sft/*, /usr/bin/mkdir -p /etc/sft/*, \
+                       /usr/bin/cp /etc/sft/* /etc/sft/*, /usr/bin/mv /etc/sft/* /etc/sft/*, \
+                       /usr/bin/chmod * /etc/sft/*, /usr/bin/chown * /etc/sft/*, \
+                       /usr/bin/tee /etc/sft/*, /usr/bin/tee -a /etc/sft/*, \
+                       \
+                       /usr/bin/rm /var/lib/sftd/*, /usr/bin/rm -r /var/lib/sftd/*, /usr/bin/rm -f /var/lib/sftd/*, /usr/bin/rm -rf /var/lib/sftd/*, \
+                       /usr/bin/mkdir /var/lib/sftd/*, /usr/bin/mkdir -p /var/lib/sftd/*, \
+                       /usr/bin/cp /var/lib/sftd/* /var/lib/sftd/*, /usr/bin/mv /var/lib/sftd/* /var/lib/sftd/*, \
+                       /usr/bin/chmod * /var/lib/sftd/*, /usr/bin/chown * /var/lib/sftd/*, \
+                       /usr/bin/tee /var/lib/sftd/*, /usr/bin/tee -a /var/lib/sftd/*, \
+                       \
+                       /usr/bin/rm /var/lib/sft-gatewayd/*, /usr/bin/rm -r /var/lib/sft-gatewayd/*, /usr/bin/rm -f /var/lib/sft-gatewayd/*, /usr/bin/rm -rf /var/lib/sft-gatewayd/*, \
+                       /usr/bin/mkdir /var/lib/sft-gatewayd/*, /usr/bin/mkdir -p /var/lib/sft-gatewayd/*, \
+                       /usr/bin/cp /var/lib/sft-gatewayd/* /var/lib/sft-gatewayd/*, /usr/bin/mv /var/lib/sft-gatewayd/* /var/lib/sft-gatewayd/*, \
+                       /usr/bin/chmod * /var/lib/sft-gatewayd/*, /usr/bin/chown * /var/lib/sft-gatewayd/*, \
+                       /usr/bin/tee /var/lib/sft-gatewayd/*, /usr/bin/tee -a /var/lib/sft-gatewayd/*, \
+                       \
+                       /usr/bin/rm /var/log/sft/sessions/*, /usr/bin/rm -r /var/log/sft/sessions/*, /usr/bin/rm -f /var/log/sft/sessions/*, /usr/bin/rm -rf /var/log/sft/sessions/*, \
+                       /usr/bin/mkdir /var/log/sft/sessions/*, /usr/bin/mkdir -p /var/log/sft/sessions/*, \
+                       /usr/bin/cp /var/log/sft/sessions/* /var/log/sft/sessions/*, /usr/bin/mv /var/log/sft/sessions/* /var/log/sft/sessions/*, \
+                       /usr/bin/chmod * /var/log/sft/sessions/*, /usr/bin/chown * /var/log/sft/sessions/*, \
+                       /usr/bin/tee /var/log/sft/sessions/*, /usr/bin/tee -a /var/log/sft/sessions/*
+
+## ---- Read-only access to everything under /var/log, plus journalctl ----
+Cmnd_Alias SFT_LOGS = /usr/bin/cat /var/log/*, /usr/bin/less /var/log/*, /usr/bin/more /var/log/*, \
+                      /usr/bin/tail /var/log/*, /usr/bin/tail -f /var/log/*, /usr/bin/head /var/log/*, \
+                      /usr/bin/grep * /var/log/*, /usr/bin/zcat /var/log/*, /usr/bin/zless /var/log/*, /usr/bin/zgrep * /var/log/*, \
+                      /usr/bin/journalctl
+
+## ---- Time sync: ntpdate and/or chrony ----
+# Bare command entries below (no trailing args pattern) permit any
+# arguments per sudoers(5) — fine here since neither tool offers a shell
+# escape. The chrony service is named "chronyd" on RHEL-family distros and
+# "chrony" on Debian/Ubuntu; both are listed so the unused one is a no-op.
+Cmnd_Alias SFT_TIME = /usr/sbin/ntpdate, /usr/bin/ntpdate, \
+                      /usr/bin/chronyc, \
+                      /usr/bin/systemctl start chronyd, /usr/bin/systemctl stop chronyd, /usr/bin/systemctl restart chronyd, /usr/bin/systemctl enable chronyd, /usr/bin/systemctl disable chronyd, \
+                      /usr/bin/systemctl start chrony, /usr/bin/systemctl stop chrony, /usr/bin/systemctl restart chrony, /usr/bin/systemctl enable chrony, /usr/bin/systemctl disable chrony
+
+## ---- Packet capture ----
+# tcpdump run as root can read all traffic on the host's interfaces,
+# including anything sent in cleartext — treat this grant as equivalent to
+# full read access to the network, not just a diagnostic nicety. If that's
+# more than this operator should have, consider `setcap
+# cap_net_raw,cap_net_admin=eip $(command -v tcpdump)` instead, which lets
+# tcpdump capture without root/sudo at all.
+Cmnd_Alias SFT_NET_CAPTURE = /usr/sbin/tcpdump, /usr/bin/tcpdump
+
+## ---- sft client CLI, scoped to the session-logs subcommand ----
+# Narrowed to `sft session-logs` rather than bare `sft` with any
+# arguments — this only covers session-log retrieval, not every other
+# sft subcommand (e.g. `sft ssh`). Two forms are listed, same as the
+# sftd/sft-gatewayd support entries above: with no further args, and
+# with trailing args (`*` requires the literal space before it, so it
+# won't also match the bare form).
+Cmnd_Alias SFT_CLI = /usr/bin/sft session-logs, /usr/bin/sft session-logs *, \
+                     /usr/sbin/sft session-logs, /usr/sbin/sft session-logs *
+
+## ---- asciinema install (for local playback of session recordings) ----
+# Based on the Okta PAM Resource Kit installer:
+# https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/refs/heads/main/utilities/session_recordings/local_playback/asciinema.sh
+# That script does the download/extract/pip-fallback itself as the
+# invoking user (no root needed for any of that) and only shells out to
+# sudo for the two steps that touch the root-owned /usr/local/bin:
+# installing the binary (sudo mv <tmp-file> /usr/local/bin/asciinema) and
+# removing it on uninstall (sudo rm -f /usr/local/bin/asciinema). There's
+# no "run" entry below because playing back a recording with `asciinema
+# play ...` doesn't need root at all.
+# The source side of the mv is scoped to /tmp and /var/tmp (where the
+# script's mktemp -d puts its download) rather than left as "*", to avoid
+# handing out "move any file on the system into /usr/local/bin as root".
+# If this host's $TMPDIR is set to something else, add that path too.
+Cmnd_Alias SFT_ASCIINEMA = /usr/bin/mv /tmp/* /usr/local/bin/asciinema, \
+                           /usr/bin/mv /var/tmp/* /usr/local/bin/asciinema, \
+                           /usr/bin/rm -f /usr/local/bin/asciinema
+
+## ---- Grant it all to the group ----
+%sftadmins ALL=(root) SFT_SERVICE, SFT_PKG_DEB, SFT_PKG_RPM, SFT_SUPPORT, SFT_EDIT, SFT_FILES, SFT_LOGS, SFT_TIME, SFT_NET_CAPTURE, SFT_CLI, SFT_ASCIINEMA
+
+## For unattended/automation use (e.g. a config-management service account)
+## instead of an interactive human operator, prefix the Cmnd_Aliases above
+## with NOPASSWD: on the grant line, e.g.:
+# %sftadmins ALL=(root) NOPASSWD: SFT_SERVICE, SFT_PKG_DEB, SFT_PKG_RPM, SFT_SUPPORT, SFT_EDIT, SFT_FILES, SFT_LOGS, SFT_TIME, SFT_NET_CAPTURE, SFT_CLI, SFT_ASCIINEMA
