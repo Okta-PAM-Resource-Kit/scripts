@@ -117,6 +117,19 @@ hostname as `CanonicalName` and `BrokeredLoginGracePeriodInSeconds: 60`. An exis
 
 ## What's New
 
+### 0.2.1
+
+* Writes `sftd.yaml` (`CanonicalName` and `BrokeredLoginGracePeriodInSeconds`) on first install; `-OverwriteConfig` regenerates it
+* `Install-OktaPamServerTools` skips servers that are already enrolled, so it is safe to run repeatedly
+* New `Install-OktaPamServerTools` switches: `-Reenroll`, `-Reinstall`, `-Upgrade`, `-VersionsBehind` and `-EnrollmentTimeoutSeconds`
+* `-VersionsBehind <n>` installs the release n versions behind the latest, and an agent already at or above the target is never downgraded
+* Waits for enrollment to complete and records an `enrollment.complete` flag
+* Rejects a downloaded MSI that is too small to be real
+* Logs to the console and `C:\sftd_bootstrap.log`
+* New functions: `Uninstall-OktaPamServerTools`, `Clear-OktaPamEnrollment`, `Test-OktaPamEnrollment`, `Register-OktaPamScheduledTask` and `Unregister-OktaPamScheduledTask`
+* Scheduled tasks run as local `NT AUTHORITY\SYSTEM`
+* Behavior change: running with no parameters on an enrolled server no longer upgrades; use `-Upgrade`
+
 ### 0.1.1
 
 * Updated to use new repository structure as of 2023Q1.

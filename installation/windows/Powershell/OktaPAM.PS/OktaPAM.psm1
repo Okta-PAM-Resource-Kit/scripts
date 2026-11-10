@@ -107,7 +107,7 @@ function Get-URL-With-Authenticode(){
         if (!(Test-Path "$output")) {
             echo "Downloading $url to $output"
             New-Item -force -path $baseDir -type directory
-            Invoke-WebRequest -UserAgent "OktaPAM/PS1-0.1.1" -UseBasicParsing -TimeoutSec 30 -Uri $url -OutFile $output
+            Invoke-WebRequest -UserAgent "OktaPAM/PS1-0.2.1" -UseBasicParsing -TimeoutSec 30 -Uri $url -OutFile $output
         } else {
             echo "Existing $output found"
         }
