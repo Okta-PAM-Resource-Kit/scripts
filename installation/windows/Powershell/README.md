@@ -61,6 +61,11 @@ Uninstall-OktaPamServerTools [-ClearEnrollment]
 Clear-OktaPamEnrollment      # same as -Reenroll without installing
 Test-OktaPamEnrollment       # $true when device.token exists and enrollment.token is gone
 
+Get-OktaPamServerToolsVersion [-InstalledOnly]
+#    Lists the available versions (newest first) and marks the installed one.
+#    Index is the value to use with -VersionsBehind. -InstalledOnly skips the
+#    download server and returns just the installed version.
+
 Register-OktaPamScheduledTask -Schedule <AtStartup|Daily|Weekly|Repeat> [-At <time>]
                               [-DaysOfWeek <days>] [-DaysInterval <n>] [-WeeksInterval <n>]
                               [-RepeatEvery <timespan>] [-TaskName <name>]
@@ -71,10 +76,23 @@ Unregister-OktaPamScheduledTask [-TaskName <name>]
 
 Progress is logged to the console and to `C:\sftd_bootstrap.log`.
 
+Running `Install-OktaPamServerTools` with no parameters (or with `-Help`) only prints the usage;
+nothing is installed. Parameters are never taken positionally, so a stray argument such as
+`--help` or `foo` is rejected instead of being used as the enrollment token. An
+`-EnrollmentToken` that starts with `-` or `/`, or contains whitespace, is rejected as well.
+To install the latest agent without enrolling, run `Install-OktaPamServerTools -Upgrade`.
+
 **Already-enrolled servers are skipped.** If the server is enrolled (`device.token` present,
 `enrollment.token` absent) the install does nothing, so it is safe to run on every boot. To
 upgrade an enrolled server, pass `-Upgrade` (or `-ToolsVersion`, which implies it), or use
 `-Reinstall`. Running with no parameters on an enrolled server no longer upgrades.
+
+**Download verification.** After the Authenticode signature check, the MSI's size and SHA3-512
+are compared with the values published in `dull.json`. SHA3-512 needs PowerShell 7 (.NET 8) on an
+OS that supports it, such as Windows 11 or Server 2025; elsewhere the size is still checked and
+a warning is logged. `dull.json` only lists the 5 newest releases, so `-VersionsBehind` can only
+select those (0-4) and `Get-OktaPamServerToolsVersion` lists those 5. Use `-ToolsVersion` for an
+older release; it is signature-checked but has no published size or hash to verify.
 
 An upgrade only happens when the installed agent is older than the target version. An agent
 already at or above the target is left alone, so `-VersionsBehind` never downgrades.
@@ -116,6 +134,15 @@ hostname as `CanonicalName` and `BrokeredLoginGracePeriodInSeconds: 60`. An exis
 `sftd.yaml` is left alone unless `-OverwriteConfig` is given.
 
 ## What's New
+
+### 0.2.2
+
+* New `Get-OktaPamServerToolsVersion` lists the available versions (with their `-VersionsBehind` index) and marks the installed one; `-InstalledOnly` returns just the installed version
+* Downloads are verified against the size and SHA3-512 published in `dull.json` (SHA3-512 needs PowerShell 7 on Windows 11 / Server 2025; otherwise a warning is logged and the Authenticode check applies)
+* `-VersionsBehind` is limited to the releases `dull.json` publishes (the 5 newest); use `-ToolsVersion` for older ones
+* Running `Install-OktaPamServerTools` with no parameters now prints usage instead of installing; `-Help` / `-h` does the same
+* Parameters are no longer accepted positionally, so a stray argument can no longer end up in `enrollment.token`
+* `-EnrollmentToken` is rejected if it starts with `-` or `/` or contains whitespace
 
 ### 0.2.1
 

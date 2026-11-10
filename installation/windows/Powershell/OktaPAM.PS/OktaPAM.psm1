@@ -1,66 +1,3 @@
-<#
- .Synopsis
-  Installs the OktaPAM Server Toools
-
- .Description
-  Installs the OktaPAM Server Tools to a specific version, and if installing for the first time
-  will set the configuration file with various values.
-
-  Also provides Uninstall-OktaPamServerTools, Clear-OktaPamEnrollment and Test-OktaPamEnrollment.
-  Progress is logged to the console and to C:\sftd_bootstrap.log.
-
- .Parameter ToolsVersion
-  Optional, version of the OktaPAM Server Tools to Install. If not supplied, the latest available
-  version is installed. Supplying a version on an already enrolled server implies -Upgrade.
-
- .Parameter EnrollmentToken
-  Optionally sets the OktaPAM Enrollment Token. Without a token the agent is installed but not
-  enrolled; enroll it later by running again with -EnrollmentToken.
-
- .Parameter OverwriteConfig
-  Optional, regenerates sftd.yaml (CanonicalName and BrokeredLoginGracePeriodInSeconds) even if
-  one already exists. By default an existing sftd.yaml is left unchanged.
-
- .Parameter Reenroll
-  Optional, clears enrollment data (enrollment.complete flag and the state directory) so the
-  server enrolls again. The agent stays installed.
-
- .Parameter Reinstall
-  Optional, uninstalls the agent before installing it again. Combine with -Reenroll to also
-  clear enrollment data.
-
- .Parameter Upgrade
-  Optional, upgrades an already enrolled server (to the latest version, or to -ToolsVersion)
-  while keeping its enrollment. Without -Upgrade an enrolled server is skipped. Supplying
-  -ToolsVersion or -VersionsBehind implies -Upgrade. An agent already at or above the target
-  version is left alone.
-
- .Parameter VersionsBehind
-  Optional, installs the release N versions behind the latest (0 = latest, 1 = the one before it,
-  and so on) for admins who don't want the newest agent. Implies -Upgrade, cannot be combined
-  with -ToolsVersion, and never downgrades an agent that is already at or above that version.
-
- .Parameter EnrollmentTimeoutSeconds
-  Optional, how long to wait for the agent to consume enrollment.token and create device.token.
-  Defaults to 120.
-
- .Example
-   # Installs the OktaPAM Server Agent
-   Install-OktaPAMServerTools -ToolsVersion 1.22.1
-
- .Example
-   # Installs and enrolls the agent
-   Install-OktaPamServerTools -EnrollmentToken <token>
-
- .Example
-   # Clears enrollment data and enrolls again with a new token
-   Install-OktaPamServerTools -EnrollmentToken <token> -Reenroll
-
- .Example
-   # Uninstalls and reinstalls the agent, clearing enrollment data
-   Install-OktaPamServerTools -EnrollmentToken <token> -Reinstall -Reenroll
-#>
-
 $script:LogFile = "C:\sftd_bootstrap.log"
 
 function Write-OktaPamLog(){
@@ -96,6 +33,64 @@ function Get-OktaPamPaths(){
     }
 }
 
+$script:InstallBaseUrl = "https://dist.scaleft.com/repos/windows/stable/amd64/server-tools"
+
+# Installed agent version from sftd.exe, or $null if not installed or not parseable.
+# Normalized to major.minor.build so it compares equal to release versions.
+function Get-OktaPamInstalledVersion(){
+    $paths = Get-OktaPamPaths
+    if (-not (Test-Path $paths.SftdExe)) {
+        return $null
+    }
+    $v = $null
+    if ([version]::TryParse((Get-Item $paths.SftdExe).VersionInfo.ProductVersion, [ref]$v)) {
+        if ($v.Build -ge 0 -and $v.Revision -le 0) {
+            return [version]::new($v.Major, $v.Minor, $v.Build)
+        }
+        return $v
+    }
+    return $null
+}
+
+# SHA3-512 is only available on .NET 8+ with OS support (e.g. PowerShell 7 on Windows 11 / Server 2025)
+function Test-OktaPamSha3Supported(){
+    $type = "System.Security.Cryptography.SHA3_512" -as [type]
+    return [bool]($type -and $type::IsSupported)
+}
+
+# SHA3-512 of a file as unpadded base64url, the encoding dull.json uses
+function Get-OktaPamFileSha3512(){
+    param([Parameter(Mandatory=$true)][string]$Path)
+    $sha = [System.Security.Cryptography.SHA3_512]::Create()
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $hash = $sha.ComputeHash($stream)
+    } finally {
+        $stream.Dispose()
+        $sha.Dispose()
+    }
+    return ([Convert]::ToBase64String($hash)).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+}
+
+# Available releases, newest first. Index is the value for -VersionsBehind (0 = latest).
+function Get-OktaPamReleases(){
+    $jsonData = Invoke-RestMethod -Uri "$($script:InstallBaseUrl)/dull.json"
+    $index = 0
+    foreach ($release in @($jsonData.releases)) {
+        $installer = $release.links | where { $_.rel -eq "installer" }
+        $link = $installer.href
+        $version = if ($link -match 'v?(\d+\.\d+\.\d+)') { $Matches[1] } else { [string]$release.version }
+        [pscustomobject]@{
+            Index   = $index
+            Version = $version
+            Url     = "$($script:InstallBaseUrl)/$link"
+            Length  = $installer.length
+            Sha3512 = $installer.hashes.sha3_512
+        }
+        $index++
+    }
+}
+
 function Get-URL-With-Authenticode(){
     param(
         [Parameter(Mandatory=$true)][string]$url,
@@ -107,7 +102,7 @@ function Get-URL-With-Authenticode(){
         if (!(Test-Path "$output")) {
             echo "Downloading $url to $output"
             New-Item -force -path $baseDir -type directory
-            Invoke-WebRequest -UserAgent "OktaPAM/PS1-0.2.1" -UseBasicParsing -TimeoutSec 30 -Uri $url -OutFile $output
+            Invoke-WebRequest -UserAgent "OktaPAM/PS1-0.2.2" -UseBasicParsing -TimeoutSec 30 -Uri $url -OutFile $output
         } else {
             echo "Existing $output found"
         }
@@ -248,6 +243,7 @@ function Clear-OktaPamEnrollment(){
   Optional, also deletes the enrollment.complete flag and state directory.
 #>
 function Uninstall-OktaPamServerTools(){
+    [CmdletBinding(PositionalBinding=$false)]
     param(
         [Parameter(Mandatory=$false)][switch]$ClearEnrollment
     )
@@ -262,9 +258,82 @@ function Uninstall-OktaPamServerTools(){
     }
 }
 
+<#
+ .Synopsis
+  Installs the OktaPAM Server Toools
+
+ .Description
+  Installs the OktaPAM Server Tools to a specific version, and if installing for the first time
+  will set the configuration file with various values.
+
+  Also provides Uninstall-OktaPamServerTools, Clear-OktaPamEnrollment, Test-OktaPamEnrollment,
+  Get-OktaPamServerToolsVersion, Register-OktaPamScheduledTask and Unregister-OktaPamScheduledTask.
+  Run with no parameters (or -Help) to show this usage; nothing is installed unless you ask for it.
+  Progress is logged to the console and to C:\sftd_bootstrap.log.
+
+ .Parameter Help
+  Shows this usage. Running with no parameters does the same.
+
+ .Parameter ToolsVersion
+  Optional, version of the OktaPAM Server Tools to Install. If not supplied, the latest available
+  version is installed. Supplying a version on an already enrolled server implies -Upgrade.
+
+ .Parameter EnrollmentToken
+  Optionally sets the OktaPAM Enrollment Token. Without a token the agent is installed but not
+  enrolled; enroll it later by running again with -EnrollmentToken.
+
+ .Parameter OverwriteConfig
+  Optional, regenerates sftd.yaml (CanonicalName and BrokeredLoginGracePeriodInSeconds) even if
+  one already exists. By default an existing sftd.yaml is left unchanged.
+
+ .Parameter Reenroll
+  Optional, clears enrollment data (enrollment.complete flag and the state directory) so the
+  server enrolls again. The agent stays installed.
+
+ .Parameter Reinstall
+  Optional, uninstalls the agent before installing it again. Combine with -Reenroll to also
+  clear enrollment data.
+
+ .Parameter Upgrade
+  Optional, upgrades an already enrolled server (to the latest version, or to -ToolsVersion)
+  while keeping its enrollment. Without -Upgrade an enrolled server is skipped. Supplying
+  -ToolsVersion or -VersionsBehind implies -Upgrade. An agent already at or above the target
+  version is left alone.
+
+ .Parameter VersionsBehind
+  Optional, installs the release N versions behind the latest (0 = latest, 1 = the one before it,
+  and so on) for admins who don't want the newest agent. Only the releases published in dull.json
+  (currently the 5 newest) can be selected; use -ToolsVersion for an older one. Implies -Upgrade, cannot be combined
+  with -ToolsVersion, and never downgrades an agent that is already at or above that version.
+
+ .Parameter EnrollmentTimeoutSeconds
+  Optional, how long to wait for the agent to consume enrollment.token and create device.token.
+  Defaults to 120.
+
+ .Example
+   # Installs the OktaPAM Server Agent
+   Install-OktaPAMServerTools -ToolsVersion 1.22.1
+
+ .Example
+   # Installs and enrolls the agent
+   Install-OktaPamServerTools -EnrollmentToken <token>
+
+ .Example
+   # Clears enrollment data and enrolls again with a new token
+   Install-OktaPamServerTools -EnrollmentToken <token> -Reenroll
+
+ .Example
+   # Uninstalls and reinstalls the agent, clearing enrollment data
+   Install-OktaPamServerTools -EnrollmentToken <token> -Reinstall -Reenroll
+#>
 function Install-OktaPamServerTools(){
+    [CmdletBinding(PositionalBinding=$false)]
     param(
-        [Parameter(Mandatory=$false)][string]$EnrollmentToken,
+        [Parameter(Mandatory=$false)][Alias("h")][switch]$Help,
+        [Parameter(Mandatory=$false)][ValidateScript({
+            if ($_ -notmatch '^[^\s/-]\S*$') { throw "EnrollmentToken must not contain whitespace or start with '-' or '/' - '$_' looks like an option, not a token." }
+            $true
+        })][string]$EnrollmentToken,
         [Parameter(Mandatory=$false)][string]$ToolsVersion,
         [Parameter(Mandatory=$false)][switch]$OverwriteConfig,
         [Parameter(Mandatory=$false)][switch]$Reenroll,
@@ -274,6 +343,15 @@ function Install-OktaPamServerTools(){
         [Parameter(Mandatory=$false)][int]$EnrollmentTimeoutSeconds = 120
     )
     process{
+        # Show usage instead of installing when nothing was asked for
+        if ($Help -or $PSBoundParameters.Count -eq 0) {
+            if (-not $Help) {
+                Write-Host "No parameters given - nothing was installed. Usage:"
+            }
+            Get-Help Install-OktaPamServerTools -Detailed | Out-Host
+            return
+        }
+
         $ErrorActionPreference = "Stop";
         # Check that the function is being run as administator.
         if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -375,24 +453,24 @@ function Install-OktaPamServerTools(){
             }
         }
 
-        $installBaseUrl = "https://dist.scaleft.com/repos/windows/stable/amd64/server-tools"
-        $jsonUrl = "$($installBaseUrl)/dull.json"
-        $jsonData = Invoke-RestMethod -Uri $jsonUrl
+        $installBaseUrl = $script:InstallBaseUrl
         # Releases are listed newest first, so -VersionsBehind N picks the Nth release back from the latest
-        $releases = @($jsonData.releases)
+        $releases = @(Get-OktaPamReleases)
         $releaseIndex = if ($explicitBehind) { $VersionsBehind } else { 0 }
         if ($releaseIndex -ge $releases.Count) {
             throw "-VersionsBehind $VersionsBehind is out of range: only $($releases.Count) releases are available (0 = latest)."
         }
         $release = $releases[$releaseIndex]
-        $releaseLink = ($release.links | where { $_.rel -eq "installer" }).href
+
+        # Hash and size to verify the download against; only releases listed in dull.json have them
+        $expectedRelease = if ($explicitVersion) { $releases | where { $_.Version -eq $ToolsVersion } | select -First 1 } else { $release }
 
         if ($explicitVersion) {
             $targetVersion = $ToolsVersion
             $installerURL = "$($installBaseUrl)/v$($ToolsVersion)/ScaleFT-Server-Tools-$($ToolsVersion).msi"
         } else {
-            $targetVersion = if ($releaseLink -match 'v?(\d+\.\d+\.\d+)') { $Matches[1] } else { $release.version }
-            $installerURL = "$($installBaseUrl)/$($releaseLink)"
+            $targetVersion = $release.Version
+            $installerURL = $release.Url
         }
         if ($explicitBehind) {
             Write-OktaPamLog "Selected release $VersionsBehind version(s) behind the latest: $targetVersion"
@@ -401,11 +479,10 @@ function Install-OktaPamServerTools(){
         Write-OktaPamLog "MSI URL: $installerURL"
 
         # Don't reinstall (or downgrade) an enrolled agent that is already at or above the target
-        if ($enrolled -and (Test-Path $paths.SftdExe)) {
-            $installedVersion = $null
+        if ($enrolled) {
+            $installedVersion = Get-OktaPamInstalledVersion
             $target = $null
-            if ([version]::TryParse((Get-Item $paths.SftdExe).VersionInfo.ProductVersion, [ref]$installedVersion) -and
-                [version]::TryParse($targetVersion, [ref]$target)) {
+            if ($installedVersion -and [version]::TryParse($targetVersion, [ref]$target)) {
                 if ($installedVersion -ge $target) {
                     Write-OktaPamLog "Installed version $installedVersion is already at or above $targetVersion. Nothing to do."
                     return
@@ -446,6 +523,28 @@ function Install-OktaPamServerTools(){
         if ($msiSize -lt 1000000) {
             Remove-Item -Force $msiPath
             throw "Downloaded file is too small ($msiSize bytes) - may be an error page, not an MSI"
+        }
+
+        # Verify the download against the length and SHA3-512 published in dull.json
+        if ($expectedRelease) {
+            if ($expectedRelease.Length -and $msiSize -ne $expectedRelease.Length) {
+                Remove-Item -Force $msiPath
+                throw "Downloaded MSI is $msiSize bytes but dull.json lists $($expectedRelease.Length) bytes for $($expectedRelease.Version)"
+            }
+            if ($expectedRelease.Sha3512 -and (Test-OktaPamSha3Supported)) {
+                $actualHash = Get-OktaPamFileSha3512 -Path $msiPath
+                if ($actualHash -ne $expectedRelease.Sha3512) {
+                    Remove-Item -Force $msiPath
+                    throw "SHA3-512 mismatch for $($expectedRelease.Version): expected $($expectedRelease.Sha3512) but downloaded file is $actualHash"
+                }
+                Write-OktaPamLog "Size and SHA3-512 verified against dull.json"
+            } elseif ($expectedRelease.Sha3512) {
+                Write-OktaPamLog "Size verified. SHA3-512 is not supported by this PowerShell/OS (needs PowerShell 7 with .NET 8 on Windows 11 or Server 2025) - relying on the Authenticode signature check" "WARNING"
+            } else {
+                Write-OktaPamLog "Size verified. No hash published in dull.json for $targetVersion - relying on the Authenticode signature check" "WARNING"
+            }
+        } else {
+            Write-OktaPamLog "$targetVersion is not listed in dull.json, so size and hash cannot be verified - relying on the Authenticode signature check" "WARNING"
         }
 
         $stopped = Stop-ScaleFTService
@@ -554,6 +653,7 @@ function Install-OktaPamServerTools(){
    Register-OktaPamScheduledTask -Schedule Repeat -RepeatEvery (New-TimeSpan -Hours 6)
 #>
 function Register-OktaPamScheduledTask(){
+    [CmdletBinding(PositionalBinding=$false)]
     param(
         [Parameter(Mandatory=$false)][string]$TaskName = "OktaPAM-ServerTools",
         [Parameter(Mandatory=$true)][ValidateSet("AtStartup","Daily","Weekly","Repeat")][string]$Schedule,
@@ -627,6 +727,7 @@ function Register-OktaPamScheduledTask(){
   Removes the scheduled task created by Register-OktaPamScheduledTask.
 #>
 function Unregister-OktaPamScheduledTask(){
+    [CmdletBinding(PositionalBinding=$false)]
     param(
         [Parameter(Mandatory=$false)][string]$TaskName = "OktaPAM-ServerTools"
     )
@@ -642,4 +743,56 @@ function Unregister-OktaPamScheduledTask(){
     }
 }
 
-Export-ModuleMember -function Install-OktaPamServerTools, Uninstall-OktaPamServerTools, Clear-OktaPamEnrollment, Test-OktaPamEnrollment, Register-OktaPamScheduledTask, Unregister-OktaPamScheduledTask
+<#
+ .Synopsis
+  Lists the available OktaPAM Server Tools versions and the installed version, if any.
+
+ .Description
+  Returns one object per available release, newest first, with:
+    Index      the value to pass to -VersionsBehind (0 = latest)
+    Version    the release version
+    Installed  $true for the release matching the installed agent
+    Url        the MSI download URL
+    Length     the MSI size in bytes
+    Sha3512    the published SHA3-512 (base64url) the download is verified against
+  If the installed version is not among the available releases (for example it is older than the
+  list, or was installed manually), it is still included with Index set to $null. Does not require
+  administrator rights.
+
+ .Parameter InstalledOnly
+  Optional, returns only the installed version (or nothing if the agent is not installed) without
+  contacting the download server.
+
+ .Example
+   Get-OktaPamServerToolsVersion | Format-Table Index, Version, Installed
+#>
+function Get-OktaPamServerToolsVersion(){
+    [CmdletBinding(PositionalBinding=$false)]
+    param(
+        [Parameter(Mandatory=$false)][switch]$InstalledOnly
+    )
+    process{
+        $ErrorActionPreference = "Stop";
+        $installed = Get-OktaPamInstalledVersion
+
+        if ($InstalledOnly) {
+            if ($installed) {
+                [pscustomobject]@{ Index = $null; Version = $installed.ToString(); Installed = $true; Url = $null; Length = $null; Sha3512 = $null }
+            }
+            return
+        }
+
+        $releases = @(Get-OktaPamReleases)
+        $found = $false
+        foreach ($r in $releases) {
+            $isInstalled = [bool]($installed -and $r.Version -eq $installed.ToString())
+            if ($isInstalled) { $found = $true }
+            $r | Add-Member -NotePropertyName Installed -NotePropertyValue $isInstalled -PassThru
+        }
+        if ($installed -and -not $found) {
+            [pscustomobject]@{ Index = $null; Version = $installed.ToString(); Installed = $true; Url = $null; Length = $null; Sha3512 = $null }
+        }
+    }
+}
+
+Export-ModuleMember -function Install-OktaPamServerTools, Uninstall-OktaPamServerTools, Clear-OktaPamEnrollment, Test-OktaPamEnrollment, Get-OktaPamServerToolsVersion, Register-OktaPamScheduledTask, Unregister-OktaPamScheduledTask
