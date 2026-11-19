@@ -24,30 +24,79 @@ function Get-OktaPamPaths(){
     $configDir = Join-Path $systemprofile -ChildPath 'AppData' | Join-Path -ChildPath "Local" | Join-Path -ChildPath "ScaleFT"
     [pscustomobject]@{
         ConfigDir       = $configDir
-        StateDir        = Join-Path $configDir -ChildPath "state"
         YamlFile        = Join-Path $configDir -ChildPath "sftd.yaml"
         TokenFile       = Join-Path $configDir -ChildPath "enrollment.token"
         DeviceTokenFile = Join-Path $configDir -ChildPath "device.token"
+        StateDeviceTokenFile = Join-Path $configDir -ChildPath "state\device.token"
         EnrollmentFlag  = Join-Path $configDir -ChildPath "enrollment.complete"
-        SftdExe         = Join-Path $env:ProgramFiles -ChildPath "ScaleFT\Server Agent\sftd.exe"
     }
+}
+
+# Extracts the executable path from a service command line such as: "C:\Program Files\x\sftd.exe" --flag
+function Get-OktaPamExeFromCommandLine(){
+    param([string]$CommandLine)
+    if ($CommandLine -match '^\s*"([^"]+)"') { return $Matches[1] }
+    if ($CommandLine -match '^\s*(.+?\.exe)(\s|$)') { return $Matches[1] }
+    return $null
+}
+
+# Path to sftd.exe, or $null. The install folder differs between agent releases, so ask the service first.
+function Get-OktaPamAgentExe(){
+    $svc = Get-CimInstance -ClassName Win32_Service -Filter "Name='scaleft-server-tools'" -ErrorAction SilentlyContinue
+    if ($svc) {
+        $exe = Get-OktaPamExeFromCommandLine $svc.PathName
+        if ($exe -and (Test-Path $exe)) { return $exe }
+    }
+    foreach ($dir in "Server Tools", "Server Agent") {
+        $candidate = Join-Path $env:ProgramFiles -ChildPath "ScaleFT\$dir\sftd.exe"
+        if (Test-Path $candidate) { return $candidate }
+    }
+    return $null
+}
+
+# The installed ScaleFT MSI from the Uninstall registry keys (name, version and product code), or $null
+function Get-OktaPamInstalledProduct(){
+    $keys = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    $entry = Get-ItemProperty -Path $keys -ErrorAction SilentlyContinue |
+        Where-Object { $_.DisplayName -like "*ScaleFT*" } |
+        Select-Object -First 1
+    if (-not $entry) { return $null }
+    [pscustomobject]@{
+        DisplayName    = $entry.DisplayName
+        DisplayVersion = $entry.DisplayVersion
+        ProductCode    = if ($entry.PSChildName -match '^\{[0-9A-Fa-f-]+\}$') { $entry.PSChildName } else { $null }
+    }
+}
+
+function Test-OktaPamAgentInstalled(){
+    return [bool]((Get-OktaPamInstalledProduct) -or (Get-OktaPamAgentExe))
+}
+
+# Normalizes to major.minor.build so it compares equal to release versions
+function ConvertTo-OktaPamVersion(){
+    param([string]$Text)
+    $v = $null
+    if (-not [version]::TryParse($Text, [ref]$v)) { return $null }
+    if ($v.Build -ge 0 -and $v.Revision -le 0) {
+        return [version]::new($v.Major, $v.Minor, $v.Build)
+    }
+    return $v
 }
 
 $script:InstallBaseUrl = "https://dist.scaleft.com/repos/windows/stable/amd64/server-tools"
 
-# Installed agent version from sftd.exe, or $null if not installed or not parseable.
-# Normalized to major.minor.build so it compares equal to release versions.
+# Installed agent version from the MSI registration, falling back to sftd.exe. $null if not installed
+# or not parseable.
 function Get-OktaPamInstalledVersion(){
-    $paths = Get-OktaPamPaths
-    if (-not (Test-Path $paths.SftdExe)) {
-        return $null
+    $product = Get-OktaPamInstalledProduct
+    if ($product -and $product.DisplayVersion) {
+        $v = ConvertTo-OktaPamVersion $product.DisplayVersion
+        if ($v) { return $v }
     }
-    $v = $null
-    if ([version]::TryParse((Get-Item $paths.SftdExe).VersionInfo.ProductVersion, [ref]$v)) {
-        if ($v.Build -ge 0 -and $v.Revision -le 0) {
-            return [version]::new($v.Major, $v.Minor, $v.Build)
-        }
-        return $v
+    $exe = Get-OktaPamAgentExe
+    if ($exe) {
+        return (ConvertTo-OktaPamVersion (Get-Item $exe).VersionInfo.ProductVersion)
     }
     return $null
 }
@@ -102,7 +151,7 @@ function Get-URL-With-Authenticode(){
         if (!(Test-Path "$output")) {
             echo "Downloading $url to $output"
             New-Item -force -path $baseDir -type directory
-            Invoke-WebRequest -UserAgent "OktaPAM/PS1-0.2.2" -UseBasicParsing -TimeoutSec 30 -Uri $url -OutFile $output
+            Invoke-WebRequest -UserAgent "OktaPAM/PS1-0.2.3" -UseBasicParsing -TimeoutSec 30 -Uri $url -OutFile $output
         } else {
             echo "Existing $output found"
         }
@@ -118,10 +167,11 @@ function Get-URL-With-Authenticode(){
     }
 }
 
-# The service is registered as scaleft-server-tools and displayed as "ScaleFT Server Agent"
+# The service is registered as scaleft-server-tools and displayed as "ScaleFT Server Tools"
+# (or "ScaleFT Server Agent" in other releases)
 function Get-ScaleFTService(){
     Get-Service -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -eq "scaleft-server-tools" -or $_.DisplayName -eq "ScaleFT Server Agent" } |
+        Where-Object { $_.Name -eq "scaleft-server-tools" -or $_.DisplayName -in "ScaleFT Server Tools", "ScaleFT Server Agent" } |
         Select-Object -First 1
 }
 
@@ -131,6 +181,10 @@ function Stop-ScaleFTService(){
         if ($svc.Status -ne "Stopped") {
             Write-OktaPamLog "Stopping service $($svc.Name)"
             Stop-Service -Name $svc.Name
+            # The process can outlive the stop request and keep device.token open
+            $svc.Refresh()
+            try { $svc.WaitForStatus("Stopped", [timespan]::FromSeconds(30)) } catch { }
+            Get-Process -Name sftd -ErrorAction SilentlyContinue | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue
             return $true
         }
         Write-OktaPamLog "Service $($svc.Name) is not running"
@@ -148,10 +202,16 @@ function Start-ScaleFTService(){
     return $false
 }
 
+# The agent keeps device.token in the state directory (older releases) or the config directory
+function Test-OktaPamDeviceToken(){
+    $paths = Get-OktaPamPaths
+    return ((Test-Path $paths.StateDeviceTokenFile) -or (Test-Path $paths.DeviceTokenFile))
+}
+
 # Enrollment is only confirmed when device.token exists and enrollment.token is absent
 function Test-OktaPamEnrollment(){
     $paths = Get-OktaPamPaths
-    return ((-not (Test-Path $paths.TokenFile)) -and (Test-Path $paths.DeviceTokenFile))
+    return ((-not (Test-Path $paths.TokenFile)) -and (Test-OktaPamDeviceToken))
 }
 
 # Polls until enrollment is confirmed. Returns $true on success, $false on timeout.
@@ -178,33 +238,45 @@ function Set-OktaPamEnrollmentFlag(){
     Write-OktaPamLog "Enrollment flag created at: $($paths.EnrollmentFlag)"
 }
 
-# Deletes the enrollment flag and state directory. Does not touch the service.
+# Un-enrolls the server by deleting device.token (from the state or config directory) and the
+# enrollment flag. The rest of the state directory is left alone. Does not touch the service.
 function Remove-OktaPamEnrollmentData(){
     $paths = Get-OktaPamPaths
     if (Test-Path $paths.EnrollmentFlag) {
         Write-OktaPamLog "Deleting enrollment flag: $($paths.EnrollmentFlag)"
         Remove-Item -Force $paths.EnrollmentFlag
     }
-    if (Test-Path $paths.StateDir) {
-        Write-OktaPamLog "Deleting state directory: $($paths.StateDir)"
-        Remove-Item -Recurse -Force $paths.StateDir
+    foreach ($tokenFile in $paths.StateDeviceTokenFile, $paths.DeviceTokenFile) {
+        if (Test-Path $tokenFile) {
+            Write-OktaPamLog "Deleting device token: $tokenFile"
+            Remove-Item -Force $tokenFile
+        }
     }
     Write-OktaPamLog "Enrollment data cleared"
 }
 
 function Remove-OktaPamAgent(){
-    $paths = Get-OktaPamPaths
-    if (Test-Path $paths.SftdExe) {
+    $product = Get-OktaPamInstalledProduct
+    if ($product -and $product.ProductCode) {
+        Write-OktaPamLog "Uninstalling $($product.DisplayName) $($product.DisplayVersion) ($($product.ProductCode))..."
+        $log = Join-Path ([System.IO.Path]::GetTempPath()) "sftd_uninstall.log"
+        $status = Start-Process -FilePath msiexec -ArgumentList /x,$product.ProductCode,/qn,/L*V!,$log -Wait -PassThru
+        # 3010 means success but a restart is pending
+        if ($status.ExitCode -ne 0 -and $status.ExitCode -ne 3010) {
+            throw "msiexec uninstall failed with exit code: $($status.ExitCode) Log: $log"
+        }
+    } elseif (Test-OktaPamAgentInstalled) {
         Write-OktaPamLog "Uninstalling existing OPA agent..."
         Get-CimInstance -ClassName Win32_Product | Where-Object { $_.Name -like '*ScaleFT*' } | ForEach-Object { $_.Uninstall() | Out-Null }
         Start-Sleep -Seconds 10
-        if (Test-Path $paths.SftdExe) {
-            Write-OktaPamLog "Agent executable still exists after uninstall attempt" "WARNING"
-        } else {
-            Write-OktaPamLog "Agent uninstalled successfully"
-        }
     } else {
         Write-OktaPamLog "No existing agent installation found"
+        return
+    }
+    if (Test-OktaPamAgentInstalled) {
+        Write-OktaPamLog "Agent still appears to be installed after the uninstall attempt" "WARNING"
+    } else {
+        Write-OktaPamLog "Agent uninstalled successfully"
     }
 }
 
@@ -213,7 +285,7 @@ function Remove-OktaPamAgent(){
   Clears the OktaPAM enrollment data so the server can enroll again.
 
  .Description
-  Deletes the enrollment.complete flag and the state directory. The agent stays installed. The
+  Deletes device.token and the enrollment.complete flag. The agent stays installed. The
   service is stopped while the data is removed and started again if it was running.
 #>
 function Clear-OktaPamEnrollment(){
@@ -240,7 +312,7 @@ function Clear-OktaPamEnrollment(){
   -ClearEnrollment is given.
 
  .Parameter ClearEnrollment
-  Optional, also deletes the enrollment.complete flag and state directory.
+  Optional, also deletes device.token and the enrollment.complete flag.
 #>
 function Uninstall-OktaPamServerTools(){
     [CmdletBinding(PositionalBinding=$false)]
@@ -287,7 +359,7 @@ function Uninstall-OktaPamServerTools(){
   one already exists. By default an existing sftd.yaml is left unchanged.
 
  .Parameter Reenroll
-  Optional, clears enrollment data (enrollment.complete flag and the state directory) so the
+  Optional, clears enrollment data (device.token and the enrollment.complete flag) so the
   server enrolls again. The agent stays installed.
 
  .Parameter Reinstall
@@ -311,8 +383,8 @@ function Uninstall-OktaPamServerTools(){
   Defaults to 120.
 
  .Example
-   # Installs the OktaPAM Server Agent
-   Install-OktaPAMServerTools -ToolsVersion 1.22.1
+   # Installs a specific version (minimum 1.66.4)
+   Install-OktaPamServerTools -ToolsVersion 1.100.2
 
  .Example
    # Installs and enrolls the agent
@@ -326,6 +398,31 @@ function Uninstall-OktaPamServerTools(){
    # Uninstalls and reinstalls the agent, clearing enrollment data
    Install-OktaPamServerTools -EnrollmentToken <token> -Reinstall -Reenroll
 #>
+function Show-OktaPamInstallUsage(){
+    Write-Host @"
+Usage: Install-OktaPamServerTools [options]
+
+  -EnrollmentToken <token>    Enroll the agent with this token
+  -ToolsVersion <x.y.z>       Install a specific version (minimum 1.66.4)
+  -Upgrade                    Upgrade an enrolled server to the latest version
+  -VersionsBehind <n>         Install the release n versions behind the latest (0 = latest)
+  -Reenroll                   Clear enrollment data so the server enrolls again
+  -Reinstall                  Uninstall the agent first, then install it again
+  -OverwriteConfig            Regenerate sftd.yaml even if it already exists
+  -EnrollmentTimeoutSeconds   How long to wait for enrollment (default 120)
+  -Help                       Show this usage
+
+Examples:
+  Install-OktaPamServerTools -EnrollmentToken <token>
+  Install-OktaPamServerTools -Upgrade
+  Install-OktaPamServerTools -ToolsVersion 1.100.2 -EnrollmentToken <token>
+
+Related: Get-OktaPamServerToolsVersion, Uninstall-OktaPamServerTools,
+Clear-OktaPamEnrollment, Test-OktaPamEnrollment, Register-OktaPamScheduledTask
+Full help: Get-Help Install-OktaPamServerTools -Full
+"@
+}
+
 function Install-OktaPamServerTools(){
     [CmdletBinding(PositionalBinding=$false)]
     param(
@@ -334,7 +431,11 @@ function Install-OktaPamServerTools(){
             if ($_ -notmatch '^[^\s/-]\S*$') { throw "EnrollmentToken must not contain whitespace or start with '-' or '/' - '$_' looks like an option, not a token." }
             $true
         })][string]$EnrollmentToken,
-        [Parameter(Mandatory=$false)][string]$ToolsVersion,
+        [Parameter(Mandatory=$false)][ValidateScript({
+            if ($_ -notmatch '^\d+\.\d+\.\d+$') { throw "ToolsVersion must look like 1.100.2, not '$_'." }
+            if ([version]$_ -lt [version]"1.66.4") { throw "ToolsVersion $_ is older than the minimum supported version 1.66.4." }
+            $true
+        })][string]$ToolsVersion,
         [Parameter(Mandatory=$false)][switch]$OverwriteConfig,
         [Parameter(Mandatory=$false)][switch]$Reenroll,
         [Parameter(Mandatory=$false)][switch]$Reinstall,
@@ -348,7 +449,7 @@ function Install-OktaPamServerTools(){
             if (-not $Help) {
                 Write-Host "No parameters given - nothing was installed. Usage:"
             }
-            Get-Help Install-OktaPamServerTools -Detailed | Out-Host
+            Show-OktaPamInstallUsage
             return
         }
 
@@ -423,11 +524,11 @@ function Install-OktaPamServerTools(){
             }
 
             # Installed but not running: start it and see whether it was mid-enrollment
-            if (-not $enrolled -and (Test-Path $paths.SftdExe) -and (-not $svc -or $svc.Status -ne "Running")) {
+            if (-not $enrolled -and (Test-OktaPamAgentInstalled) -and (-not $svc -or $svc.Status -ne "Running")) {
                 Write-OktaPamLog "OPA agent is installed but service is not running - attempting to start it" "WARNING"
                 try {
                     Start-ScaleFTService | Out-Null
-                    if ((Test-Path $paths.TokenFile) -or (Test-Path $paths.DeviceTokenFile)) {
+                    if ((Test-Path $paths.TokenFile) -or (Test-OktaPamDeviceToken)) {
                         Write-OktaPamLog "Waiting for enrollment to complete..."
                         if (Wait-OktaPamEnrollment -TimeoutSeconds $EnrollmentTimeoutSeconds) {
                             Set-OktaPamEnrollmentFlag
@@ -569,10 +670,13 @@ function Install-OktaPamServerTools(){
         Write-OktaPamLog "Removing $($msiPath)"
         Remove-Item -Force $msiPath
 
-        if (Test-Path $paths.SftdExe) {
-            Write-OktaPamLog "Installation verified - sftd.exe found"
+        $installed = Get-OktaPamInstalledProduct
+        $exe = Get-OktaPamAgentExe
+        if ($installed -or $exe) {
+            $where = if ($exe) { $exe } else { $installed.DisplayName }
+            Write-OktaPamLog "Installation verified - $where$(if ($installed.DisplayVersion) { " $($installed.DisplayVersion)" })"
         } else {
-            Write-OktaPamLog "sftd.exe not found at $($paths.SftdExe)" "WARNING"
+            Write-OktaPamLog "Could not confirm the installation from the Uninstall registry keys or sftd.exe - check $msiLog" "WARNING"
         }
 
         Start-ScaleFTService | Out-Null

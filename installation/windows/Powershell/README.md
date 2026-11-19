@@ -6,7 +6,7 @@
 
 ### `Install-OktaPamServerTools`
 
-This function will download and install the OktaPAM Server Tools.  It can optionally set the enrollment token.  If the OktaPAM Server Tools are already installed, this function will upgrade them to the latest or specified version.
+This function will download and install the OktaPAM Server Tools.  It can optionally set the enrollment token.  If the OktaPAM Server Tools are already installed and enrolled, it does nothing unless you ask for an upgrade with `-Upgrade` (see below).
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ These modules are tested under PowerShell version 7
 
 ## Installation
 
-1. Copy the entire module folder, OktaPAM.PS, into 'C:\Program Files (x86)\WindowsPowerShell\Modules'
+1. Copy the entire module folder, OktaPAM.PS, into 'C:\Program Files\WindowsPowerShell\Modules' (this folder is on the module path for both Windows PowerShell and PowerShell 7)
 
 ```Powershell
 mkdir "C:\Program Files\WindowsPowerShell\Modules\OktaPAM.PS"
@@ -26,7 +26,15 @@ cmd /c "curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/
 2. Verify the module is available
 
 ```Powershell
-Get-Module -ListAvailable
+Get-Module -ListAvailable -Name OktaPAM.PS
+```
+
+If this prints nothing, check that the folder is named `OktaPAM.PS`, that it contains both `OktaPAM.PS.psd1` and
+`OktaPAM.psm1`, and that its parent folder is listed in `$env:PSModulePath`. You can also import the manifest
+directly, which works from any location:
+
+```Powershell
+Import-Module "C:\Program Files\WindowsPowerShell\Modules\OktaPAM.PS\OktaPAM.PS.psd1" -Force
 ```
 
 3. Once verified, import the module
@@ -49,7 +57,7 @@ Install-OktaPamServerTools [-ToolsVersion <version>] [-EnrollmentToken <enrollme
 #                         Without a token the agent is installed but not enrolled
 #                         For upgrades, there is no need to provide an enrollment token.
 #    -OverwriteConfig     Regenerates sftd.yaml even if one already exists
-#    -Reenroll            Deletes the enrollment flag and state directory so the server enrolls again
+#    -Reenroll            Deletes device.token and the enrollment flag so the server enrolls again
 #    -Reinstall           Uninstalls the agent first. Add -Reenroll to also clear enrollment data
 #    -Upgrade             Upgrades an enrolled server (latest, or -ToolsVersion) and keeps enrollment
 #    -VersionsBehind      Installs the release N versions behind the latest (0 = latest, 1 = previous)
@@ -134,6 +142,15 @@ hostname as `CanonicalName` and `BrokeredLoginGracePeriodInSeconds: 60`. An exis
 `sftd.yaml` is left alone unless `-OverwriteConfig` is given.
 
 ## What's New
+
+### 0.2.3
+
+* Fixed enrollment being reported as incomplete: `device.token` is now found in the `state` folder as well as the config folder, which fixes `Test-OktaPamEnrollment` and the post-install enrollment wait
+* Fixed `Uninstall-OktaPamServerTools` and the install checks not finding the agent: the agent is now located through its service and the Uninstall registry key instead of a fixed `sftd.exe` path, and is uninstalled by product code
+* `-Reenroll` / `Clear-OktaPamEnrollment` now only delete `device.token` and the enrollment flag instead of the whole state folder, which fixes the "in use" failure
+* Running `Install-OktaPamServerTools` with no parameters or `-Help` prints a short usage instead of the full help
+* `-ToolsVersion` must look like `1.100.2` and be at least 1.66.4; fixed the out-of-date example
+* README: corrected the module install path and added a check for when `Get-Module -ListAvailable` shows nothing
 
 ### 0.2.2
 
