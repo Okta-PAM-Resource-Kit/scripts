@@ -10,7 +10,7 @@ Refer to directions found in the Powershell folder
 
 ### Command Shell Script
 
-This is a simple command shell script that will install a specific version of the scaleft-server-tools.  Update the script with latest version before executing.
+This is a simple command shell script that installs, enrolls and upgrades the scaleft-server-tools.  It installs the latest version unless you pass `/version`.
 
 Script usage:
 
@@ -18,6 +18,20 @@ Script usage:
 cmd /c "curl -O https://raw.githubusercontent.com/Okta-PAM-Resource-Kit/scripts/refs/heads/main/installation/windows/OPA-Windows-Server-Installer.cmd"
 cmd /c "OPA-Windows-Server-Installer.cmd /token:<enrollment_token>"
 ```
+
+Options:
+
+| Option | Meaning |
+| --- | --- |
+| `/token:<token>` | Enroll the agent with this token. Without a token the agent is installed but not enrolled. |
+| `/version:<x.y.z>` | Install a specific version instead of the latest. Implies `/upgrade` on an enrolled server. |
+| `/upgrade` | Upgrade an already enrolled agent to the latest version (or `/version`) and keep its enrollment. Does nothing if the installed version is already at or above the target. |
+| `/reenroll` | Delete `device.token` and the enrollment flag so the server enrolls again. |
+| `/reinstall` | Uninstall the agent first, then install it again. |
+
+An enrolled server is skipped unless you pass `/upgrade`, `/version`, `/reenroll` or `/reinstall`, so the script is safe to run at every boot.
+
+The downloaded MSI must have a valid Authenticode signature, and is checked against the size and SHA3-512 published in `dull.json`.  SHA3-512 needs PowerShell 7 on Windows 11 or Server 2025; elsewhere only the size is checked and a warning is logged.  An invalid signature, or a size or hash mismatch, stops the install.
 
 
 ## Client ssh config update

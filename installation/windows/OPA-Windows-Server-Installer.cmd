@@ -13,10 +13,17 @@ setlocal enabledelayedexpansion
 ::                       If not provided and default is enrollment_token, agent installs
 ::                       without enrollment (manual enrollment required later)
 ::   /version:VALUE    - Specific agent version like "1.75.2" (optional, uses latest)
-::   /reenroll         - Force re-enrollment: deletes enrollment flag and state directory
+::   /reenroll         - Force re-enrollment: deletes device.token and the enrollment flag
 ::                       Agent remains installed, only enrollment data is cleared
 ::   /reinstall        - Force reinstallation: uninstalls and reinstalls the agent
 ::                       Use with /reenroll to also clear enrollment data
+::   /upgrade          - Upgrade an already enrolled agent to the latest version (or to
+::                       /version) and keep its enrollment. Does nothing if the installed
+::                       version is already at or above the target. /version implies /upgrade
+::
+:: The downloaded MSI must have a valid Authenticode signature, and is checked against
+:: the size and SHA3-512 published in dull.json. SHA3-512 needs PowerShell 7 on
+:: Windows 11 / Server 2025; otherwise only the size is checked and a warning is logged.
 ::
 :: Note: You can use either /switch:value or /switch=value syntax for value parameters
 ::
@@ -27,6 +34,7 @@ setlocal enabledelayedexpansion
 ::   OPA-Windows-Server-Installer.cmd /token:eyJzIjoi... /version:1.75.2
 ::   OPA-Windows-Server-Installer.cmd /reenroll
 ::   OPA-Windows-Server-Installer.cmd /reinstall
+::   OPA-Windows-Server-Installer.cmd /upgrade
 ::   OPA-Windows-Server-Installer.cmd /reenroll /reinstall
 ::   OPA-Windows-Server-Installer.cmd /token:eyJzIjoi... /version:1.75.2 /reenroll /reinstall
 :: ============================================================================
@@ -37,11 +45,15 @@ set STATE_DIR=%CONFIG_DIR%\state
 set YAML_FILE=%CONFIG_DIR%\sftd.yaml
 set TOKEN_FILE=%CONFIG_DIR%\enrollment.token
 set DEVICE_TOKEN_FILE=%CONFIG_DIR%\device.token
+set STATE_DEVICE_TOKEN_FILE=%STATE_DIR%\device.token
 set ENROLLMENT_FLAG=%CONFIG_DIR%\enrollment.complete
 set JSON_URL=https://dist.scaleft.com/repos/windows/stable/amd64/server-tools/dull.json
 set BASE_URL=https://dist.scaleft.com/repos/windows/stable/amd64/server-tools
 set TEMP_JSON=%TEMP%\scaleft_dull.json
-set SFTD_EXE="C:\Program Files\ScaleFT\Server Agent\sftd.exe"
+:: Service name as registered by the MSI (its display name is "ScaleFT Server Tools")
+set SERVICE_NAME=scaleft-server-tools
+:: Install folder differs between agent releases; set by :FindSftd
+set "SFTD_EXE="
 
 :: Default enrollment token (can be overridden via command line)
 set DEFAULT_TOKEN=enrollment_token
@@ -56,6 +68,8 @@ set SPECIFIC_VERSION=
 set FORCE_REENROLL=0
 set FORCE_REINSTALL=0
 set TOKEN_PROVIDED=0
+set DO_UPGRADE=0
+set ALREADY_ENROLLED=0
 
 :: Raw command line: cmd treats = as an argument delimiter, so %~1 loses trailing ==
 set "RAW_ARGS=%*"
@@ -82,6 +96,13 @@ if /i "!arg!"=="/reenroll" (
 :: Check for /reinstall flag (case insensitive)
 if /i "!arg!"=="/reinstall" (
     set FORCE_REINSTALL=1
+    shift
+    goto :parse_args
+)
+
+:: Check for /upgrade flag (case insensitive)
+if /i "!arg!"=="/upgrade" (
+    set DO_UPGRADE=1
     shift
     goto :parse_args
 )
@@ -116,6 +137,8 @@ echo !arg! | findstr /i "^/version[:=]" >nul
 if !errorlevel! equ 0 (
     :: Extract value after /version: or /version= (both are 9 chars)
     set SPECIFIC_VERSION=!arg:~9!
+    :: Asking for a specific version also counts as a request to upgrade
+    set DO_UPGRADE=1
     shift
     goto :parse_args
 )
@@ -147,7 +170,7 @@ if not "!SPECIFIC_VERSION!"=="" (
 
 if !FORCE_REENROLL! equ 1 (
     call :Log "WARNING: Force re-enrollment requested"
-    call :Log "WARNING: Will delete enrollment flag and state directory"
+    call :Log "WARNING: Will delete device.token and the enrollment flag"
 )
 
 if !FORCE_REINSTALL! equ 1 (
@@ -163,10 +186,10 @@ if !FORCE_REENROLL! equ 1 (
 
     :: Stop the service if running (only if not doing full reinstall)
     if !FORCE_REINSTALL! equ 0 (
-        call :Log "INFO: Attempting to stop ScaleFT Server Agent service..."
-        sc query "ScaleFT Server Agent" 2>nul | find "RUNNING" >nul
+        call :Log "INFO: Attempting to stop %SERVICE_NAME% service..."
+        sc query %SERVICE_NAME% 2>nul | find "RUNNING" >nul
         if !errorlevel! equ 0 (
-            sc stop "ScaleFT Server Agent" >nul 2>&1
+            sc stop %SERVICE_NAME% >nul 2>&1
             timeout /t 5 /nobreak >nul
             call :Log "INFO: Service stopped"
         ) else (
@@ -185,14 +208,16 @@ if !FORCE_REENROLL! equ 1 (
         )
     )
 
-    :: Delete state directory recursively
-    if exist "%STATE_DIR%" (
-        call :Log "INFO: Deleting state directory: %STATE_DIR%"
-        rd /s /q "%STATE_DIR%" 2>nul
-        if !errorlevel! equ 0 (
-            call :Log "INFO: State directory deleted"
-        ) else (
-            call :Log "WARNING: Failed to delete state directory"
+    :: Delete device.token (state folder on current agents, config folder on others)
+    for %%F in ("%STATE_DEVICE_TOKEN_FILE%" "%DEVICE_TOKEN_FILE%") do (
+        if exist "%%~F" (
+            call :Log "INFO: Deleting device token: %%~F"
+            del /f /q "%%~F" 2>nul
+            if !errorlevel! equ 0 (
+                call :Log "INFO: Device token deleted"
+            ) else (
+                call :Log "WARNING: Failed to delete device token %%~F"
+            )
         )
     )
 
@@ -206,23 +231,30 @@ if !FORCE_REINSTALL! equ 1 (
     call :Log "INFO: Force reinstallation mode - removing existing agent..."
 
     :: Stop the service if running
-    call :Log "INFO: Attempting to stop ScaleFT Server Agent service..."
-    sc query "ScaleFT Server Agent" 2>nul | find "RUNNING" >nul
+    call :Log "INFO: Attempting to stop %SERVICE_NAME% service..."
+    sc query %SERVICE_NAME% 2>nul | find "RUNNING" >nul
     if !errorlevel! equ 0 (
-        sc stop "ScaleFT Server Agent" >nul 2>&1
+        sc stop %SERVICE_NAME% >nul 2>&1
         timeout /t 5 /nobreak >nul
         call :Log "INFO: Service stopped"
     ) else (
         call :Log "INFO: Service not running"
     )
 
-    :: Uninstall existing agent
-    if exist "%SFTD_EXE%" (
+    :: Uninstall existing agent (located via the Uninstall registry key, not a fixed sftd.exe path)
+    call :IsAgentInstalled
+    if !errorlevel! equ 0 (
         call :Log "INFO: Uninstalling existing OPA agent..."
-        powershell -Command "Get-CimInstance -ClassName Win32_Product | Where-Object { $_.Name -like '*ScaleFT*' } | ForEach-Object { $_.Uninstall() }" >nul 2>&1
-        timeout /t 10 /nobreak >nul
-        if exist "%SFTD_EXE%" (
-            call :Log "WARNING: Agent executable still exists after uninstall attempt"
+        powershell -NoProfile -Command "$e = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like '*ScaleFT*' } | Select-Object -First 1; if ($e -and $e.PSChildName -match '^\{.*\}$') { $p = Start-Process msiexec -ArgumentList '/x',$e.PSChildName,'/qn' -Wait -PassThru; if ($p.ExitCode -eq 0 -or $p.ExitCode -eq 3010) { exit 0 } else { exit $p.ExitCode } } else { exit 1 }" >nul 2>&1
+        set UNINSTALL_RC=!errorlevel!
+        if !UNINSTALL_RC! neq 0 (
+            call :Log "WARNING: msiexec uninstall returned !UNINSTALL_RC! - trying Win32_Product"
+            powershell -Command "Get-CimInstance -ClassName Win32_Product | Where-Object { $_.Name -like '*ScaleFT*' } | ForEach-Object { $_.Uninstall() }" >nul 2>&1
+            timeout /t 10 /nobreak >nul
+        )
+        call :IsAgentInstalled
+        if !errorlevel! equ 0 (
+            call :Log "WARNING: Agent still appears to be installed after uninstall attempt"
             call :Log "WARNING: Proceeding with fresh installation attempt"
         ) else (
             call :Log "INFO: Agent uninstalled successfully"
@@ -243,78 +275,85 @@ if !FORCE_REENROLL! equ 0 if !FORCE_REINSTALL! equ 0 (
     :: Check if enrollment completion flag exists
     if exist "%ENROLLMENT_FLAG%" (
         :: Enrollment is only confirmed when device.token exists and enrollment.token is absent
+        call :CheckDeviceToken
         if not exist "%TOKEN_FILE%" (
-            if exist "%DEVICE_TOKEN_FILE%" (
+            if "!DEVICE_TOKEN_PRESENT!"=="1" (
                 call :Log "INFO: Enrollment verified - device.token present, enrollment.token absent"
-                call :Log "INFO: Skipping enrollment to prevent duplicate registration"
-                echo.
-                echo ============================================================================
-                echo OPA agent is already enrolled. Skipping installation.
-                echo To force re-enrollment, run with /reenroll flag
-                echo To force reinstallation, run with /reinstall flag
-                echo ============================================================================
-                exit /b 0
+                set ALREADY_ENROLLED=1
             )
         )
-        call :Log "WARNING: Enrollment flag found but enrollment is not confirmed"
-        if exist "%TOKEN_FILE%" call :Log "WARNING: enrollment.token still present - enrollment may be in progress or failed"
-        if not exist "%DEVICE_TOKEN_FILE%" call :Log "WARNING: device.token not found - enrollment has not completed"
-        call :Log "WARNING: Clearing enrollment flag and proceeding with re-enrollment"
-        del /f /q "%ENROLLMENT_FLAG%" 2>nul
+        if !ALREADY_ENROLLED! equ 0 (
+            call :Log "WARNING: Enrollment flag found but enrollment is not confirmed"
+            if exist "%TOKEN_FILE%" call :Log "WARNING: enrollment.token still present - enrollment may be in progress or failed"
+            if not "!DEVICE_TOKEN_PRESENT!"=="1" call :Log "WARNING: device.token not found - enrollment has not completed"
+            call :Log "WARNING: Clearing enrollment flag and proceeding with re-enrollment"
+            del /f /q "%ENROLLMENT_FLAG%" 2>nul
+        )
     )
 
     :: Check if service is already running and enrollment is confirmed
-    sc query "ScaleFT Server Agent" 2>nul | find "RUNNING" >nul
-    if !errorlevel! equ 0 (
-        call :Log "INFO: ScaleFT Server Agent service is running"
-        if not exist "%TOKEN_FILE%" (
-            if exist "%DEVICE_TOKEN_FILE%" (
-                call :Log "INFO: Enrollment confirmed - device.token present, enrollment.token absent"
-                call :Log "INFO: Skipping enrollment to prevent duplicate registration"
-
-                :: Create enrollment flag for future boots
-                if not exist "%CONFIG_DIR%" mkdir "%CONFIG_DIR%" 2>nul
-                echo Enrolled on %date% at %time% > "%ENROLLMENT_FLAG%"
-
-                echo.
-                echo ============================================================================
-                echo OPA agent is already enrolled and running. Skipping installation.
-                echo ============================================================================
-                exit /b 0
-            )
-        )
-        call :Log "INFO: Service is running but enrollment not yet confirmed - enrollment may still be in progress"
-    )
-
-    :: Check if agent executable exists (installed but maybe not running yet)
-    if exist "%SFTD_EXE%" (
-        call :Log "WARNING: OPA agent is installed but service is not running"
-        call :Log "WARNING: Attempting to start the service..."
-
-        sc start "ScaleFT Server Agent" 2>nul
+    if !ALREADY_ENROLLED! equ 0 (
+        sc query %SERVICE_NAME% 2>nul | find "RUNNING" >nul
         if !errorlevel! equ 0 (
-            call :Log "INFO: Successfully started ScaleFT Server Agent service"
-            call :Log "INFO: Waiting for enrollment to complete..."
-            call :WaitForEnrollment
-            if !errorlevel! equ 0 (
-                :: Create enrollment flag only after enrollment is confirmed
-                if not exist "%CONFIG_DIR%" mkdir "%CONFIG_DIR%" 2>nul
-                echo Enrolled on %date% at %time% > "%ENROLLMENT_FLAG%"
+            call :Log "INFO: %SERVICE_NAME% service is running"
+            call :CheckDeviceToken
+            if not exist "%TOKEN_FILE%" (
+                if "!DEVICE_TOKEN_PRESENT!"=="1" (
+                    call :Log "INFO: Enrollment confirmed - device.token present, enrollment.token absent"
 
-                echo.
-                echo ============================================================================
-                echo OPA agent was already installed. Service started and enrollment confirmed.
-                echo ============================================================================
-                exit /b 0
-            ) else (
-                call :Log "WARNING: Service started but enrollment did not complete - will attempt reinstallation"
+                    :: Create enrollment flag for future boots
+                    if not exist "%CONFIG_DIR%" mkdir "%CONFIG_DIR%" 2>nul
+                    echo Enrolled on %date% at %time% > "%ENROLLMENT_FLAG%"
+                    set ALREADY_ENROLLED=1
+                )
             )
-        ) else (
-            call :Log "WARNING: Failed to start service - will attempt reinstallation"
+            if !ALREADY_ENROLLED! equ 0 call :Log "INFO: Service is running but enrollment not yet confirmed - enrollment may still be in progress"
         )
     )
 
-    call :Log "INFO: No existing installation found - proceeding with enrollment"
+    :: Check if the agent is installed (but maybe not running yet)
+    if !ALREADY_ENROLLED! equ 0 (
+        call :IsAgentInstalled
+        if !errorlevel! equ 0 (
+            call :Log "WARNING: OPA agent is installed but service is not running"
+            call :Log "WARNING: Attempting to start the service..."
+
+            sc start %SERVICE_NAME% 2>nul
+            if !errorlevel! equ 0 (
+                call :Log "INFO: Successfully started %SERVICE_NAME% service"
+                call :Log "INFO: Waiting for enrollment to complete..."
+                call :WaitForEnrollment
+                if !errorlevel! equ 0 (
+                    :: Create enrollment flag only after enrollment is confirmed
+                    if not exist "%CONFIG_DIR%" mkdir "%CONFIG_DIR%" 2>nul
+                    echo Enrolled on %date% at %time% > "%ENROLLMENT_FLAG%"
+                    set ALREADY_ENROLLED=1
+                ) else (
+                    call :Log "WARNING: Service started but enrollment did not complete - will attempt reinstallation"
+                )
+            ) else (
+                call :Log "WARNING: Failed to start service - will attempt reinstallation"
+            )
+        )
+    )
+
+    if !ALREADY_ENROLLED! equ 1 (
+        if !DO_UPGRADE! equ 0 (
+            call :Log "INFO: Skipping enrollment to prevent duplicate registration"
+            echo.
+            echo ============================================================================
+            echo OPA agent is already enrolled. Skipping installation.
+            echo To upgrade the agent, run with /upgrade ^(or /version^)
+            echo To force re-enrollment, run with /reenroll flag
+            echo To force reinstallation, run with /reinstall flag
+            echo ============================================================================
+            exit /b 0
+        )
+        call :Log "INFO: Agent is enrolled and an upgrade was requested - keeping the existing enrollment"
+        set SKIP_ENROLLMENT=1
+    ) else (
+        call :Log "INFO: No existing installation found - proceeding with enrollment"
+    )
 )
 
 :: ============================================================================
@@ -343,7 +382,11 @@ if not exist "%CONFIG_DIR%" (
     call :Log "INFO: Directory already exists: %CONFIG_DIR%"
 )
 
-:: Create sftd.yaml configuration file
+:: Create sftd.yaml configuration file (an upgrade keeps the existing one)
+if !ALREADY_ENROLLED! equ 1 if exist "%YAML_FILE%" (
+    call :Log "INFO: Existing sftd.yaml found - leaving it unchanged"
+    goto :yaml_done
+)
 call :Log "INFO: Creating sftd.yaml configuration file..."
 echo CanonicalName: !canonical_name! > "%YAML_FILE%"
 if !errorlevel! neq 0 (
@@ -356,6 +399,7 @@ if !errorlevel! neq 0 (
     exit /b 1
 )
 call :Log "INFO: Successfully created sftd.yaml file"
+:yaml_done
 
 :: Write enrollment token (if provided)
 if !SKIP_ENROLLMENT! equ 0 (
@@ -380,6 +424,14 @@ if not "!SPECIFIC_VERSION!"=="" (
     call :Log "INFO: Using specific version: !SPECIFIC_VERSION!"
     set MSI_URL=%BASE_URL%/v!SPECIFIC_VERSION!/ScaleFT-Server-Tools-!SPECIFIC_VERSION!.msi
     call :Log "INFO: Constructed MSI URL: !MSI_URL!"
+    set TARGET_VERSION=!SPECIFIC_VERSION!
+
+    :: Version metadata is still needed to verify the download (best effort here)
+    if exist "%TEMP_JSON%" del "%TEMP_JSON%" 2>nul
+    powershell -Command "try { Invoke-WebRequest -Uri '%JSON_URL%' -OutFile '%TEMP_JSON%' -UseBasicParsing -ErrorAction Stop } catch { exit 1 }"
+    if !errorlevel! neq 0 (
+        call :Log "WARNING: Could not download version metadata - the download cannot be verified"
+    )
 ) else (
     :: Fetch latest version information from JSON metadata
     call :Log "INFO: Fetching latest version information from %JSON_URL%..."
@@ -412,9 +464,17 @@ if not "!SPECIFIC_VERSION!"=="" (
     :: Extract version for logging
     for /f "tokens=1 delims=/" %%v in ("!MSI_RELATIVE_PATH!") do set DETECTED_VERSION=%%v
     call :Log "INFO: Latest available version: !DETECTED_VERSION!"
+    set TARGET_VERSION=!DETECTED_VERSION:v=!
+)
 
-    :: Clean up temporary JSON file
-    if exist "%TEMP_JSON%" del "%TEMP_JSON%" 2>nul
+:: An enrolled agent that is already at or above the target version needs no upgrade
+if !ALREADY_ENROLLED! equ 1 (
+    call :CompareVersion
+    if "!COMPARE_RESULT!"=="CURRENT" (
+        call :Log "INFO: Installed version is already at or above !TARGET_VERSION! - nothing to do"
+        if exist "%TEMP_JSON%" del "%TEMP_JSON%" 2>nul
+        exit /b 0
+    )
 )
 
 :: Download MSI to temp file (msiexec /i does not support HTTP URLs on modern Windows)
@@ -440,25 +500,68 @@ if !MSI_SIZE! lss 1000000 (
 )
 call :Log "INFO: MSI downloaded successfully (!MSI_SIZE! bytes)"
 
+:: Verify the Authenticode signature, then the size and SHA3-512 published in dull.json
+set VERIFY_MSI=!TEMP_MSI!
+call :VerifySignature
+if "!SIG_FAILED!"=="1" (
+    call :Log "ERROR: The downloaded MSI does not have a valid Authenticode signature - not installing it"
+    if exist "!TEMP_MSI!" del "!TEMP_MSI!" 2>nul
+    if exist "%TEMP_JSON%" del "%TEMP_JSON%" 2>nul
+    exit /b 1
+)
+set VERIFY_VERSION=!TARGET_VERSION!
+set VERIFY_JSON=%TEMP_JSON%
+call :VerifyDownload
+if exist "%TEMP_JSON%" del "%TEMP_JSON%" 2>nul
+if "!VERIFY_FAILED!"=="1" (
+    call :Log "ERROR: The downloaded MSI does not match dull.json - not installing it"
+    if exist "!TEMP_MSI!" del "!TEMP_MSI!" 2>nul
+    exit /b 1
+)
+
 :: Install OPA Server Agent
 call :Log "INFO: Installing Okta OPA Server Agent..."
 call :Log "INFO: This may take several minutes..."
+if !ALREADY_ENROLLED! equ 1 (
+    call :Log "INFO: Stopping %SERVICE_NAME% service for the upgrade..."
+    sc stop %SERVICE_NAME% >nul 2>&1
+    timeout /t 5 /nobreak >nul
+)
 msiexec /qn /i "!TEMP_MSI!" /L*V "C:\sftd_install.log"
 if !errorlevel! neq 0 (
     call :Log "ERROR: Failed to install OPA Server Agent (Exit Code: !errorlevel!)"
     call :Log "ERROR: Check C:\sftd_install.log for details"
+    if !ALREADY_ENROLLED! equ 1 sc start %SERVICE_NAME% >nul 2>&1
     if exist "!TEMP_MSI!" del "!TEMP_MSI!" 2>nul
     exit /b 1
 )
 if exist "!TEMP_MSI!" del "!TEMP_MSI!" 2>nul
 call :Log "INFO: Successfully installed Okta OPA Server Agent"
+if !ALREADY_ENROLLED! equ 1 sc start %SERVICE_NAME% >nul 2>&1
 
 :: Verify installation
 call :Log "INFO: Verifying installation..."
-if exist "%SFTD_EXE%" (
-    call :Log "INFO: Installation verified - sftd.exe found"
+call :FindSftd
+call :IsAgentInstalled
+if !errorlevel! equ 0 (
+    if defined SFTD_EXE (
+        call :Log "INFO: Installation verified - sftd.exe found at !SFTD_EXE!"
+    ) else (
+        call :Log "INFO: Installation verified from the Uninstall registry key"
+    )
 ) else (
-    call :Log "WARNING: sftd.exe not found at expected location"
+    call :Log "WARNING: Could not confirm the installation from the registry or sftd.exe"
+)
+
+if !ALREADY_ENROLLED! equ 1 (
+    call :Log "SUCCESS: Okta OPA agent upgraded to !TARGET_VERSION! - existing enrollment kept"
+    echo.
+    echo ============================================================================
+    echo Upgrade completed successfully!
+    echo Log file: %LOG_FILE%
+    echo Installation log: C:\sftd_install.log
+    echo ============================================================================
+    exit /b 0
 )
 
 if !SKIP_ENROLLMENT! equ 0 (
@@ -526,10 +629,12 @@ echo   /token:VALUE      - Enrollment token (optional)
 echo                       If not provided and default is enrollment_token, agent installs
 echo                       without enrollment (manual enrollment required later)
 echo   /version:VALUE    - Specific agent version like "1.75.2" (optional, uses latest)
-echo   /reenroll         - Force re-enrollment: deletes enrollment flag and state directory
+echo   /reenroll         - Force re-enrollment: deletes device.token and the enrollment flag
 echo                       Agent remains installed, only enrollment data is cleared
 echo   /reinstall        - Force reinstallation: uninstalls and reinstalls the agent
 echo                       Use with /reenroll to also clear enrollment data
+echo   /upgrade          - Upgrade an enrolled agent to the latest version (or /version)
+echo                       and keep its enrollment. /version implies /upgrade
 echo   /help, /?         - Display this help message
 echo.
 echo Note: You can use either /switch:value or /switch=value syntax for value parameters
@@ -541,6 +646,7 @@ echo   %~nx0 /version:1.75.2
 echo   %~nx0 /token:eyJzIjoi... /version:1.75.2
 echo   %~nx0 /reenroll
 echo   %~nx0 /reinstall
+echo   %~nx0 /upgrade
 echo   %~nx0 /reenroll /reinstall
 echo   %~nx0 /token:eyJzIjoi... /version:1.75.2 /reenroll /reinstall
 echo.
@@ -560,8 +666,9 @@ if !WAIT_COUNT! geq !WAIT_MAX! (
     endlocal
     exit /b 1
 )
+call :CheckDeviceToken
 if not exist "%TOKEN_FILE%" (
-    if exist "%DEVICE_TOKEN_FILE%" (
+    if "!DEVICE_TOKEN_PRESENT!"=="1" (
         endlocal
         exit /b 0
     )
@@ -569,6 +676,87 @@ if not exist "%TOKEN_FILE%" (
 set /a WAIT_COUNT+=1
 timeout /t 5 /nobreak >nul
 goto :WaitLoop
+
+:: ============================================================================
+:: Sets DEVICE_TOKEN_PRESENT=1 when device.token exists in the state folder or the config folder
+:: ============================================================================
+:CheckDeviceToken
+set DEVICE_TOKEN_PRESENT=0
+if exist "%STATE_DEVICE_TOKEN_FILE%" set DEVICE_TOKEN_PRESENT=1
+if exist "%DEVICE_TOKEN_FILE%" set DEVICE_TOKEN_PRESENT=1
+goto :eof
+
+:: ============================================================================
+:: Sets SFTD_EXE to the installed sftd.exe, or leaves it undefined. The install
+:: folder differs between agent releases.
+:: ============================================================================
+:FindSftd
+set "SFTD_EXE="
+for %%D in ("Server Tools" "Server Agent") do (
+    if not defined SFTD_EXE if exist "%ProgramFiles%\ScaleFT\%%~D\sftd.exe" set "SFTD_EXE=%ProgramFiles%\ScaleFT\%%~D\sftd.exe"
+)
+goto :eof
+
+:: ============================================================================
+:: Returns 0 when the agent is installed (sftd.exe found or MSI registered), 1 otherwise
+:: ============================================================================
+:IsAgentInstalled
+call :FindSftd
+if defined SFTD_EXE exit /b 0
+powershell -NoProfile -Command "if (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like '*ScaleFT*' }) { exit 0 } else { exit 1 }" >nul 2>&1
+exit /b !errorlevel!
+
+:: ============================================================================
+:: Checks the Authenticode signature of VERIFY_MSI (environment). Sets SIG_FAILED=1
+:: unless the signature is valid; failing to check it also counts as a failure.
+:: ============================================================================
+:VerifySignature
+set SIG_FAILED=0
+for /f "usebackq delims=" %%L in (`powershell -NoProfile -Command "$ErrorActionPreference='Stop'; try { $s = Get-AuthenticodeSignature -FilePath $env:VERIFY_MSI; $who = if ($s.SignerCertificate) { $s.SignerCertificate.Subject -replace '[&|<>^%%]','' } else { 'no signer' }; if ($s.Status -eq 'Valid') { 'INFO: Authenticode signature is valid - signed by ' + $who; 'RESULT:OK' } else { 'ERROR: Authenticode signature is not valid: ' + $s.Status + ' - ' + $who; 'RESULT:FAIL' } } catch { 'ERROR: Could not check the Authenticode signature: ' + $_.Exception.Message; 'RESULT:FAIL' }"`) do (
+    if "%%L"=="RESULT:FAIL" (
+        set SIG_FAILED=1
+    ) else if not "%%L"=="RESULT:OK" (
+        call :Log "%%L"
+    )
+)
+goto :eof
+
+:: ============================================================================
+:: Checks the downloaded MSI against the size and SHA3-512 in dull.json.
+:: Inputs (environment): VERIFY_MSI, VERIFY_VERSION, VERIFY_JSON
+:: Sets VERIFY_FAILED=1 on a size or hash mismatch. A missing hash, an unlisted
+:: version or a PowerShell without SHA3-512 support only logs a warning.
+:: pwsh (PowerShell 7) is preferred because Windows PowerShell has no SHA3-512.
+:: ============================================================================
+:VerifyDownload
+set VERIFY_FAILED=0
+set PS_VERIFY=powershell
+where pwsh >nul 2>&1
+if !errorlevel! equ 0 set PS_VERIFY=pwsh
+for /f "usebackq delims=" %%L in (`%PS_VERIFY% -NoProfile -Command "$ErrorActionPreference='Stop'; try { if (-not (Test-Path $env:VERIFY_JSON)) { 'WARNING: Version metadata is not available - size and hash cannot be verified'; 'RESULT:OK'; exit }; $j = Get-Content -Raw $env:VERIFY_JSON | ConvertFrom-Json; $r = @($j.releases) | Where-Object { $_.version -eq $env:VERIFY_VERSION } | Select-Object -First 1; if (-not $r) { 'WARNING: Version ' + $env:VERIFY_VERSION + ' is not listed in dull.json - size and hash cannot be verified'; 'RESULT:OK'; exit }; $l = @($r.links) | Where-Object { $_.rel -eq 'installer' } | Select-Object -First 1; $size = (Get-Item $env:VERIFY_MSI).Length; if ($l.length -and $size -ne $l.length) { 'ERROR: Downloaded MSI is ' + $size + ' bytes but dull.json lists ' + $l.length; 'RESULT:FAIL'; exit }; $want = $l.hashes.sha3_512; $t = 'System.Security.Cryptography.SHA3_512' -as [type]; if ($want -and $t -and $t::IsSupported) { $sha = $t::Create(); $s = [System.IO.File]::OpenRead($env:VERIFY_MSI); try { $h = $sha.ComputeHash($s) } finally { $s.Dispose() }; $got = [Convert]::ToBase64String($h).TrimEnd('=').Replace('+','-').Replace('/','_'); if ($got -ne $want) { 'ERROR: SHA3-512 mismatch - expected ' + $want + ' but downloaded file is ' + $got; 'RESULT:FAIL'; exit }; 'INFO: Size and SHA3-512 verified against dull.json' } elseif ($want) { 'WARNING: Size verified. SHA3-512 is not supported by this PowerShell/OS - needs PowerShell 7 on Windows 11 or Server 2025' } else { 'WARNING: Size verified. No hash is published for this version' }; 'RESULT:OK' } catch { 'WARNING: Could not verify the download: ' + $_.Exception.Message; 'RESULT:OK' }"`) do (
+    if "%%L"=="RESULT:FAIL" (
+        set VERIFY_FAILED=1
+    ) else if not "%%L"=="RESULT:OK" (
+        call :Log "%%L"
+    )
+)
+goto :eof
+
+:: ============================================================================
+:: Compares the installed agent version with TARGET_VERSION.
+:: Sets COMPARE_RESULT=CURRENT when the installed version is at or above the target,
+:: UPGRADE otherwise (including when the versions cannot be compared).
+:: ============================================================================
+:CompareVersion
+set COMPARE_RESULT=UPGRADE
+for /f "usebackq delims=" %%L in (`powershell -NoProfile -Command "$e = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like '*ScaleFT*' } | Select-Object -First 1; $i = $null; $t = $null; if ($e -and [version]::TryParse($e.DisplayVersion, [ref]$i) -and [version]::TryParse($env:TARGET_VERSION, [ref]$t)) { if ($i.Build -ge 0 -and $i.Revision -le 0) { $i = [version]::new($i.Major, $i.Minor, $i.Build) }; 'INFO: Installed version ' + $i + ', target version ' + $t; if ($i -ge $t) { 'RESULT:CURRENT' } else { 'RESULT:UPGRADE' } } else { 'WARNING: Could not compare installed and target versions - proceeding with the upgrade'; 'RESULT:UPGRADE' }"`) do (
+    if "%%L"=="RESULT:CURRENT" (
+        set COMPARE_RESULT=CURRENT
+    ) else if not "%%L"=="RESULT:UPGRADE" (
+        call :Log "%%L"
+    )
+)
+goto :eof
 
 :: ============================================================================
 :: Logging function with timestamp
