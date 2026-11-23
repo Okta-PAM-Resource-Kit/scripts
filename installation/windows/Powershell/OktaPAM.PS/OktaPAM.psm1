@@ -542,6 +542,12 @@ function Install-OktaPamServerTools(){
                 }
             }
 
+            # Leftover enrollment data without an installed agent (for example after an uninstall) is not an enrolled agent
+            if ($enrolled -and -not (Test-OktaPamAgentInstalled)) {
+                Write-OktaPamLog "Enrollment data found but the agent is not installed - installing it" "WARNING"
+                $enrolled = $false
+            }
+
             if ($enrolled -and -not $doUpgrade) {
                 Write-OktaPamLog "OPA agent is already enrolled. Skipping installation."
                 Write-OktaPamLog "Use -Upgrade (optionally with -VersionsBehind) to upgrade, -Reenroll to force re-enrollment, or -Reinstall to force reinstallation."
@@ -585,7 +591,7 @@ function Install-OktaPamServerTools(){
             $target = $null
             if ($installedVersion -and [version]::TryParse($targetVersion, [ref]$target)) {
                 if ($installedVersion -ge $target) {
-                    Write-OktaPamLog "Installed version $installedVersion is already at or above $targetVersion. Nothing to do."
+                    Write-OktaPamLog "Installed version $installedVersion is already at or above $targetVersion. Nothing to do. To install an older version, run with -Reinstall -ToolsVersion $targetVersion."
                     return
                 }
                 Write-OktaPamLog "Upgrading from $installedVersion to $targetVersion"
@@ -664,6 +670,9 @@ function Install-OktaPamServerTools(){
 
         if ($status.ExitCode -ne 0) {
 	        Start-ScaleFTService
+            if ($status.ExitCode -eq 1638) {
+                Write-OktaPamLog "Another version of the agent is already installed. Use -Reinstall to replace it (required for a downgrade)." "ERROR"
+            }
             throw "msiexec failed with exit code: $($status.ExitCode) Log: $($msiLog)"
         }
 

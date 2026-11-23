@@ -20,6 +20,7 @@ setlocal enabledelayedexpansion
 ::   /upgrade          - Upgrade an already enrolled agent to the latest version (or to
 ::                       /version) and keep its enrollment. Does nothing if the installed
 ::                       version is already at or above the target. /version implies /upgrade
+::                       To go back to an older version use /reinstall /version:VALUE
 ::
 :: The downloaded MSI must have a valid Authenticode signature, and is checked against
 :: the size and SHA3-512 published in dull.json. SHA3-512 needs PowerShell 7 on
@@ -337,6 +338,16 @@ if !FORCE_REENROLL! equ 0 if !FORCE_REINSTALL! equ 0 (
         )
     )
 
+    :: Leftover enrollment data without an installed agent (for example after an uninstall)
+    :: is not an enrolled agent
+    if !ALREADY_ENROLLED! equ 1 (
+        call :IsAgentInstalled
+        if !errorlevel! neq 0 (
+            call :Log "WARNING: Enrollment data found but the agent is not installed - installing it"
+            set ALREADY_ENROLLED=0
+        )
+    )
+
     if !ALREADY_ENROLLED! equ 1 (
         if !DO_UPGRADE! equ 0 (
             call :Log "INFO: Skipping enrollment to prevent duplicate registration"
@@ -472,6 +483,7 @@ if !ALREADY_ENROLLED! equ 1 (
     call :CompareVersion
     if "!COMPARE_RESULT!"=="CURRENT" (
         call :Log "INFO: Installed version is already at or above !TARGET_VERSION! - nothing to do"
+        call :Log "INFO: To install an older version, run with /reinstall /version:!TARGET_VERSION!"
         if exist "%TEMP_JSON%" del "%TEMP_JSON%" 2>nul
         exit /b 0
     )
@@ -528,8 +540,10 @@ if !ALREADY_ENROLLED! equ 1 (
     timeout /t 5 /nobreak >nul
 )
 msiexec /qn /i "!TEMP_MSI!" /L*V "C:\sftd_install.log"
-if !errorlevel! neq 0 (
-    call :Log "ERROR: Failed to install OPA Server Agent (Exit Code: !errorlevel!)"
+set MSI_RC=!errorlevel!
+if !MSI_RC! neq 0 (
+    call :Log "ERROR: Failed to install OPA Server Agent (Exit Code: !MSI_RC!)"
+    if !MSI_RC! equ 1638 call :Log "ERROR: Another version of the agent is already installed - run with /reinstall to replace it (required for a downgrade)"
     call :Log "ERROR: Check C:\sftd_install.log for details"
     if !ALREADY_ENROLLED! equ 1 sc start %SERVICE_NAME% >nul 2>&1
     if exist "!TEMP_MSI!" del "!TEMP_MSI!" 2>nul
@@ -635,6 +649,7 @@ echo   /reinstall        - Force reinstallation: uninstalls and reinstalls the a
 echo                       Use with /reenroll to also clear enrollment data
 echo   /upgrade          - Upgrade an enrolled agent to the latest version (or /version)
 echo                       and keep its enrollment. /version implies /upgrade
+echo                       To go back to an older version use /reinstall /version:VALUE
 echo   /help, /?         - Display this help message
 echo.
 echo Note: You can use either /switch:value or /switch=value syntax for value parameters

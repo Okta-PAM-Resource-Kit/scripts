@@ -102,6 +102,8 @@ a warning is logged. `dull.json` only lists the 5 newest releases, so `-Versions
 select those (0-4) and `Get-OktaPamServerToolsVersion` lists those 5. Use `-ToolsVersion` for an
 older release; it is signature-checked but has no published size or hash to verify.
 
+To go back to an older version, use `-Reinstall -ToolsVersion <x.y.z>`; `-Upgrade`, `-ToolsVersion` and `-VersionsBehind` alone never downgrade.
+
 An upgrade only happens when the installed agent is older than the target version. An agent
 already at or above the target is left alone, so `-VersionsBehind` never downgrades.
 

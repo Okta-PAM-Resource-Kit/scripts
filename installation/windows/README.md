@@ -29,6 +29,8 @@ Options:
 | `/reenroll` | Delete `device.token` and the enrollment flag so the server enrolls again. |
 | `/reinstall` | Uninstall the agent first, then install it again. |
 
+To go back to an older version (a downgrade), use `/reinstall /version:<x.y.z>`.  `/upgrade` and `/version` alone never install a version older than the one already installed.
+
 An enrolled server is skipped unless you pass `/upgrade`, `/version`, `/reenroll` or `/reinstall`, so the script is safe to run at every boot.
 
 The downloaded MSI must have a valid Authenticode signature, and is checked against the size and SHA3-512 published in `dull.json`.  SHA3-512 needs PowerShell 7 on Windows 11 or Server 2025; elsewhere only the size is checked and a warning is logged.  An invalid signature, or a size or hash mismatch, stops the install.
